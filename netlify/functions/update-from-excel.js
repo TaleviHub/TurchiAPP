@@ -10,7 +10,7 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY);
 
 // --- CONFIGURAZIONE SPECIFICA PER IL TUO FILE ---
 // 1. Inserisci qui il nome esatto del foglio Excel da leggere
-const NOME_FOGLIO = "Foglio 1(4)"; // Lasciamo questo per ora, lo correggeremo se necessario
+const NOME_FOGLIO = "Foglio1 (4)"; // Lasciamo questo per ora, lo correggeremo se necessario
 
 // 2. Inserisci qui i nomi esatti delle colonne che vuoi importare
 const COLONNE_DESIDERATE = [
