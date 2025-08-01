@@ -10,7 +10,7 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY);
 
 // --- CONFIGURAZIONE SPECIFICA PER IL TUO FILE ---
 // 1. Inserisci qui il nome esatto del foglio Excel da leggere
-const NOME_FOGLIO = "Foglio 1 (4)";
+const NOME_FOGLIO = "Foglio 1(4)"; // Lasciamo questo per ora, lo correggeremo se necessario
 
 // 2. Inserisci qui i nomi esatti delle colonne che vuoi importare
 const COLONNE_DESIDERATE = [
@@ -39,10 +39,16 @@ exports.handler = async (event, context) => {
     const fileBuffer = Buffer.from(base64File, 'base64');
     const workbook = xlsx.read(fileBuffer, { type: 'buffer' });
 
+    // --- NUOVO CODICE DI DEBUG ---
+    // Stampiamo nei log tutti i nomi dei fogli trovati nel file
+    console.log("Fogli trovati nel file:", workbook.SheetNames);
+    // -----------------------------
+
     // Cerca il foglio specifico per nome
     const worksheet = workbook.Sheets[NOME_FOGLIO];
     if (!worksheet) {
-      throw new Error(`Foglio di lavoro "${NOME_FOGLIO}" non trovato nel file Excel. Controlla il nome.`);
+      // Restituiamo un errore più dettagliato
+      throw new Error(`Foglio di lavoro "${NOME_FOGLIO}" non trovato. Fogli disponibili: [${workbook.SheetNames.join(", ")}]`);
     }
 
     const jsonData = xlsx.utils.sheet_to_json(worksheet);
@@ -55,9 +61,7 @@ exports.handler = async (event, context) => {
     const datiFiltrati = jsonData.map(riga => {
         const nuovaRiga = {};
         COLONNE_DESIDERATE.forEach(nomeColonna => {
-            // Supabase non ama gli spazi nei nomi delle colonne, li sostituiamo
             const nomeColonnaSupabase = nomeColonna.replace(/ /g, '_');
-            // Aggiungiamo il valore solo se esiste, altrimenti mettiamo null
             nuovaRiga[nomeColonnaSupabase] = riga[nomeColonna] !== undefined ? riga[nomeColonna] : null;
         });
         return nuovaRiga;
