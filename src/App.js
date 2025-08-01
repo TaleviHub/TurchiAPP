@@ -1,13 +1,11 @@
-// Versione con caricamento dello script robusto per massima compatibilità
+// Versione con logging di debug avanzato
 
 import React, { useState, useEffect, useCallback } from 'react';
 
-// --- CONFIGURAZIONE SUPABASE ---
 // Assicurati che questi valori siano corretti!
 const SUPABASE_URL = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZ4Ym13dWxtem1xbXltcW94empqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTM5NzQ3MzksImV4cCI6MjA2OTU1MDczOX0.9fU10_IpN0cNcjHmX9OQ1HLtdU1da-8nJ-LgvRWk7N4';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZ4Ym13dWxtem1xbXltcW94empqIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc1Mzk3NDczOSwiZXhwIjoyMDY5NTUwNzM5fQ.2KUA-iertK-U-5nmrmg-Rf5-q4nPQ6B3wLHpKW8TksE';
 
-// --- COMPONENTE PRINCIPALE DELL'APP ---
 export default function App() {
   const [data, setData] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -17,43 +15,32 @@ export default function App() {
   const [supabaseClient, setSupabaseClient] = useState(null);
   const [isUpdateUIVisible, setIsUpdateUIVisible] = useState(false);
 
-  // Funzione per caricare i dati iniziali dal database
   const fetchData = useCallback(async (client) => {
     if (!client) return;
     setLoading(true);
     setError(null);
     try {
-      const { data: tableData, error } = await client
-        .from('dati_tabella')
-        .select('*')
-        .order('id', { ascending: true });
-
+      const { data: tableData, error } = await client.from('dati_tabella').select('*').order('id', { ascending: true });
       if (error) throw error;
       setData(tableData || []);
     } catch (err) {
-      console.error("Errore nel caricamento dati:", err);
+      console.error("DEBUG: Errore nel caricamento dati:", err);
       setError('Impossibile caricare i dati dal database.');
     } finally {
       setLoading(false);
     }
   }, []);
 
-  // Funzione per gestire l'aggiornamento di una cella
   const handleCellUpdate = async (id, column, value) => {
     if (!supabaseClient) return;
     try {
-      const { error } = await supabaseClient
-        .from('dati_tabella')
-        .update({ [column]: value })
-        .eq('id', id);
-
+      const { error } = await supabaseClient.from('dati_tabella').update({ [column]: value }).eq('id', id);
       if (error) throw error;
     } catch (err) {
-      console.error("Errore nell'aggiornamento della cella:", err);
+      console.error("DEBUG: Errore nell'aggiornamento della cella:", err);
     }
   };
   
-  // Funzione per avviare l'aggiornamento dal link Excel
   const handleUpdateFromExcel = async () => {
     if (!link) {
       setError('Per favore, inserisci un link di condivisione di OneDrive.');
@@ -61,32 +48,30 @@ export default function App() {
     }
     setIsUpdating(true);
     setError(null);
-
     try {
       const response = await fetch('/.netlify/functions/update-from-excel', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ oneDriveLink: link }),
       });
-
       const result = await response.json();
       if (!response.ok) throw new Error(result.error || 'Errore sconosciuto dal server.');
-      
       setLink(''); 
       setIsUpdateUIVisible(false);
     } catch (err) {
-      console.error("Errore durante l'aggiornamento da Excel:", err);
+      console.error("DEBUG: Errore durante l'aggiornamento da Excel:", err);
       setError(`Errore: ${err.message}`);
     } finally {
       setIsUpdating(false);
     }
   };
 
-  // --- NUOVA LOGICA DI CARICAMENTO ---
-  // Questo useEffect carica la libreria Supabase tramite un tag <script>
+  // --- LOGICA DI CARICAMENTO CON DEBUGGING ---
   useEffect(() => {
-    // Controlla se lo script è già presente per evitare di caricarlo più volte
+    console.log("DEBUG: L'app si è montata. Inizio caricamento Supabase.");
+    
     if (document.querySelector('script[src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"]')) {
+        console.log("DEBUG: Lo script Supabase era già presente.");
         if (window.supabase) {
             setSupabaseClient(window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY));
         }
@@ -96,73 +81,56 @@ export default function App() {
     const script = document.createElement('script');
     script.src = 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2';
     script.async = true;
+    
+    console.log("DEBUG: Creato tag script, ora lo aggiungo alla pagina.");
 
     script.onload = () => {
+      console.log("DEBUG: L'evento 'onload' dello script è stato attivato.");
       if (window.supabase) {
+        console.log("DEBUG: 'window.supabase' trovato! Creo il client.");
         const client = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
         setSupabaseClient(client);
+        console.log("DEBUG: Client Supabase creato e impostato nello stato.");
       } else {
+        console.error("DEBUG: ERRORE CRITICO - 'onload' attivato ma 'window.supabase' non esiste.");
         setError("Libreria caricata, ma 'supabase' non trovato. Riprova a ricaricare la pagina.");
       }
     };
 
-    script.onerror = () => {
+    script.onerror = (e) => {
+      console.error("DEBUG: ERRORE CRITICO - L'evento 'onerror' dello script è stato attivato.", e);
       setError("Impossibile caricare la libreria del database. Controlla la connessione o eventuali ad-blocker.");
     };
 
     document.body.appendChild(script);
-    
-    return () => {
-        // Opzionale: pulisce lo script quando il componente viene smontato
-        document.body.removeChild(script);
-    }
+    console.log("DEBUG: Script aggiunto al body del documento.");
 
-  }, []); // L'array vuoto assicura che questo effetto venga eseguito solo una volta
+  }, []);
 
-  // useEffect per caricare i dati e ascoltare gli aggiornamenti DOPO che il client è stato inizializzato
   useEffect(() => {
     if (supabaseClient) {
+      console.log("DEBUG: Il client Supabase è pronto. Carico i dati e mi metto in ascolto.");
       fetchData(supabaseClient);
-
-      const channel = supabaseClient
-        .channel('dati_tabella_changes')
-        .on(
-          'postgres_changes',
-          { event: '*', schema: 'public', table: 'dati_tabella' },
-          (payload) => {
-            fetchData(supabaseClient);
-          }
-        )
-        .subscribe();
-
-      return () => {
-        supabaseClient.removeChannel(channel);
-      };
+      const channel = supabaseClient.channel('dati_tabella_changes').on('postgres_changes', { event: '*', schema: 'public', table: 'dati_tabella' }, (payload) => { fetchData(supabaseClient); }).subscribe();
+      return () => { supabaseClient.removeChannel(channel); };
     }
   }, [supabaseClient, fetchData]);
 
   return (
     <div className="min-h-screen bg-gray-900 text-gray-200 font-sans p-4 sm:p-6 lg:p-8">
       <div className="max-w-7xl mx-auto">
-        
-        {/* INTESTAZIONE */}
         <header className="mb-8 flex justify-between items-start gap-4">
           <div>
             <h1 className="text-4xl font-bold text-white tracking-tight">Dashboard Dati Dinamica</h1>
             <p className="text-gray-400 mt-2">Dati aggiornati in tempo reale. Clicca il pulsante per sincronizzare da un file Excel.</p>
           </div>
           {!isUpdateUIVisible && (
-             <button
-                onClick={() => setIsUpdateUIVisible(true)}
-                className="bg-gray-700 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded-md transition duration-300 flex items-center gap-2 shrink-0"
-              >
+             <button onClick={() => setIsUpdateUIVisible(true)} className="bg-gray-700 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded-md transition duration-300 flex items-center gap-2 shrink-0">
                 <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M4 2a1 1 0 011 1v2.101a7.002 7.002 0 0111.601 2.566 1 1 0 11-1.885.666A5.002 5.002 0 005.999 7H9a1 1 0 110 2H4a1 1 0 01-1-1V4a1 1 0 011-1zm10.899 10.899a7.002 7.002 0 01-11.601-2.566 1 1 0 111.885-.666A5.002 5.002 0 0014.001 13H11a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0v-2.101z" clipRule="evenodd" /></svg>
                 Aggiorna Dati
               </button>
           )}
         </header>
-
-        {/* SEZIONE DI AGGIORNAMENTO */}
         {isUpdateUIVisible && (
           <div className="bg-gray-800/50 rounded-lg p-6 mb-8 border border-gray-700 shadow-lg animate-fade-in">
             <div className="flex justify-between items-center mb-4">
@@ -178,12 +146,8 @@ export default function App() {
             {error && <p className="text-red-400 mt-4">{error}</p>}
           </div>
         )}
-
-        {/* TABELLA DEI DATI */}
         <div className="overflow-x-auto bg-gray-800/50 rounded-lg border border-gray-700 shadow-lg">
-          {loading ? (
-            <p className="p-6 text-center text-gray-400">Caricamento dati in corso...</p>
-          ) : (
+          {loading ? (<p className="p-6 text-center text-gray-400">Inizializzazione database...</p>) : (
             <table className="min-w-full text-sm text-left text-gray-300">
               <thead className="bg-gray-700/50 text-xs text-gray-300 uppercase tracking-wider">
                 <tr>{data.length > 0 && Object.keys(data[0]).map(key => (<th key={key} scope="col" className="px-6 py-3 font-medium">{key.replace(/_/g, ' ')}</th>))}</tr>
@@ -201,8 +165,6 @@ export default function App() {
           )}
            {data.length === 0 && !loading && (<p className="p-6 text-center text-gray-400">Nessun dato da visualizzare. Prova ad aggiornare i dati da un file Excel.</p>)}
         </div>
-        
-        {/* PIÈ DI PAGINA */}
         <footer className="text-center text-gray-500 mt-8 text-sm"><p>Realizzato con React, Netlify & Supabase</p></footer>
       </div>
     </div>
