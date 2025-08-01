@@ -1,22 +1,17 @@
-// Versione FINALE con vista mobile avanzata (colonne a scomparsa e sticky)
+// Versione FINALE con reset del file input per evitare problemi di cache
 
 import React, { useState, useEffect, useCallback } from 'react';
 
 // --- CONFIGURAZIONE SUPABASE ---
-const SUPABASE_URL = 'IL_TUO_URL_SUPABASE';
-const SUPABASE_ANON_KEY = 'LA_TUA_CHIAVE_ANON_SUPABASE';
+const SUPABASE_URL = 'https://vxbmwulmzmqmymqoxzjj.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZ4Ym13dWxtem1xbXltcW94empqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTM5NzQ3MzksImV4cCI6MjA2OTU1MDczOX0.9fU10_IpN0cNcjHmX9OQ1HLtdU1da-8nJ-LgvRWk7N4';
 const NOME_TABELLA = 'TaleviTurchi';
 
-// Definiamo l'ordine e i nomi delle colonne, aggiungendo larghezze minime per lo sticky
 const COLONNE_DA_VISUALIZZARE = [
-  { key: 'prog', label: 'Prog', minWidth: '5rem' }, 
-  { key: 'motrice', label: 'Motrice', minWidth: '10rem' },
-  { key: 'rimorchio', label: 'Rimorchio', minWidth: '10rem' }, 
-  { key: 'cliente', label: 'Cliente', minWidth: '12rem' },
-  { key: 'trasportatore', label: 'Trasportatore', minWidth: '10rem' }, 
-  { key: 'aci', label: 'ACI', minWidth: '6rem' },
-  { key: 'sigillo', label: 'Sigillo', minWidth: '10rem' }, 
-  { key: 'note', label: 'Note', minWidth: '20rem' },
+  { key: 'prog', label: 'Prog' }, { key: 'motrice', label: 'Motrice' },
+  { key: 'rimorchio', label: 'Rimorchio' }, { key: 'cliente', label: 'Cliente' },
+  { key: 'trasportatore', label: 'Trasportatore' }, { key: 'aci', label: 'ACI' },
+  { key: 'sigillo', label: 'Sigillo' }, { key: 'note', label: 'Note' },
 ];
 
 export default function App() {
@@ -27,15 +22,6 @@ export default function App() {
   const [isUpdating, setIsUpdating] = useState(false);
   const [supabaseClient, setSupabaseClient] = useState(null);
   const [isUpdateUIVisible, setIsUpdateUIVisible] = useState(false);
-
-  // Nuovo stato per gestire la visibilità delle colonne su mobile
-  const [visibleColumns, setVisibleColumns] = useState(
-    COLONNE_DA_VISUALIZZARE.reduce((acc, col) => ({ ...acc, [col.key]: true }), {})
-  );
-
-  const handleColumnVisibilityChange = (key) => {
-    setVisibleColumns(prev => ({ ...prev, [key]: !prev[key] }));
-  };
 
   const fetchData = useCallback(async (client) => {
     if (!client) return;
@@ -67,6 +53,7 @@ export default function App() {
     setSelectedFile(event.target.files[0]);
   };
 
+  // Funzione di aggiornamento resa più robusta
   const handleUpdateFromFile = async () => {
     if (!selectedFile) {
       setError('Per favore, seleziona un file Excel.');
@@ -75,24 +62,35 @@ export default function App() {
     setIsUpdating(true);
     setError(null);
     
-    const getBase64 = (file) => new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.readAsDataURL(file);
-      reader.onload = () => resolve(reader.result.split(',')[1]);
-      reader.onerror = error => reject(error);
-    });
+    // Log di debug nel browser
+    console.log(`Sto per inviare il file: ${selectedFile.name}, dimensione: ${selectedFile.size} bytes`);
+
+    // Usiamo una Promise per gestire la lettura del file in modo pulito
+    const getBase64 = (file) => {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.readAsDataURL(file);
+        reader.onload = () => resolve(reader.result.split(',')[1]);
+        reader.onerror = error => reject(error);
+      });
+    };
 
     try {
       const base64File = await getBase64(selectedFile);
+      
       const response = await fetch('/.netlify/functions/update-from-excel', {
         method: 'POST',
         body: JSON.stringify({ file: base64File }),
       });
+
       const result = await response.json();
       if (!response.ok) throw new Error(result.error || 'Errore sconosciuto dal server.');
+      
+      // --- MODIFICA CHIAVE: Resettiamo il campo del file ---
       document.getElementById('file-input').value = "";
       setSelectedFile(null); 
       setIsUpdateUIVisible(false);
+
     } catch (err) {
       console.error("Errore durante l'aggiornamento da Excel:", err);
       setError(`Errore: ${err.message}`);
@@ -124,20 +122,13 @@ export default function App() {
     }
   }, [supabaseClient, fetchData]);
 
-  const getStickyClass = (index) => {
-    if (index === 0) return 'sticky left-0 z-10';
-    if (index === 1) return 'sticky left-[5rem] z-10'; // 5rem = larghezza di 'prog'
-    if (index === 2) return 'sticky left-[15rem] z-10'; // 15rem = larghezza di 'prog' + 'motrice'
-    return '';
-  };
-
   return (
     <div className="min-h-screen bg-gray-900 text-gray-200 font-sans p-4 sm:p-6 lg:p-8">
       <div className="max-w-7xl mx-auto">
         <header className="mb-8 flex justify-between items-start gap-4">
           <div>
             <h1 className="text-4xl font-bold text-white tracking-tight">Talevi & Turchi Dashboard</h1>
-            <p className="text-gray-400 mt-2">Dati aggiornati in tempo reale.</p>
+            <p className="text-gray-400 mt-2">Dati aggiornati in tempo reale. Clicca il pulsante per sincronizzare da un file Excel.</p>
           </div>
           {!isUpdateUIVisible && (
              <button onClick={() => setIsUpdateUIVisible(true)} className="bg-gray-700 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded-md transition duration-300 flex items-center gap-2 shrink-0">
@@ -146,59 +137,45 @@ export default function App() {
               </button>
           )}
         </header>
-
-        {/* --- MENU GESTIONE COLONNE (SOLO MOBILE) --- */}
-        <div className="sm:hidden mb-4 bg-gray-800/50 p-4 rounded-lg border border-gray-700">
-          <p className="font-semibold mb-2 text-white">Mostra/Nascondi Colonne:</p>
-          <div className="flex flex-wrap gap-x-4 gap-y-2">
-            {COLONNE_DA_VISUALIZZARE.map(col => (
-              <label key={col.key} className="flex items-center space-x-2 text-sm cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={visibleColumns[col.key]}
-                  onChange={() => handleColumnVisibilityChange(col.key)}
-                  className="form-checkbox h-4 w-4 rounded bg-gray-700 border-gray-600 text-indigo-600 focus:ring-indigo-500"
-                />
-                <span>{col.label}</span>
-              </label>
-            ))}
+        {isUpdateUIVisible && (
+          <div className="bg-gray-800/50 rounded-lg p-6 mb-8 border border-gray-700 shadow-lg animate-fade-in">
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-xl font-semibold text-white">Aggiorna Dati da File Excel</h2>
+              <button onClick={() => setIsUpdateUIVisible(false)} className="text-gray-400 hover:text-white"><svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg></button>
+            </div>
+            <div className="flex flex-col sm:flex-row gap-4 items-center">
+              <input id="file-input" type="file" onChange={handleFileChange} accept=".xlsx, .xls" className="flex-grow file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-indigo-100 file:text-indigo-700 hover:file:bg-indigo-200 text-gray-400" />
+              <button onClick={handleUpdateFromFile} disabled={isUpdating || !selectedFile} className="bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-2 px-6 rounded-md transition duration-300 ease-in-out flex items-center justify-center disabled:bg-indigo-800 disabled:cursor-not-allowed">
+                {isUpdating ? (<>...</>) : 'Sincronizza'}
+              </button>
+            </div>
+            {error && <p className="text-red-400 mt-4">{error}</p>}
           </div>
-        </div>
-
-        {isUpdateUIVisible && ( /* ... UI di aggiornamento file ... */ )}
-        
+        )}
         <div className="overflow-x-auto bg-gray-800/50 rounded-lg border border-gray-700 shadow-lg">
           {loading ? (<p className="p-8 text-center text-gray-400">Inizializzazione database...</p>) : (
             <table className="min-w-full text-base text-left text-gray-300">
               <thead className="bg-gray-700/50 text-sm text-gray-200 uppercase tracking-wider">
                 <tr>
-                  {COLONNE_DA_VISUALIZZARE.map((col, index) => {
-                    const isVisible = visibleColumns[col.key];
-                    return (
-                      <th key={col.key} scope="col" className={`px-6 py-4 font-semibold ${getStickyClass(index)} ${index < 3 ? 'bg-gray-700/80 backdrop-blur-sm' : 'bg-gray-700/50'} ${!isVisible ? 'hidden' : ''} sm:table-cell`} style={{minWidth: col.minWidth}}>
-                        {col.label}
-                      </th>
-                    );
-                  })}
+                  {COLONNE_DA_VISUALIZZARE.map(col => (
+                    <th key={col.key} scope="col" className={`px-6 py-4 font-semibold ${col.key === 'note' ? 'w-1/3' : ''}`}>{col.label}</th>
+                  ))}
                 </tr>
               </thead>
               <tbody>
-                {data.map((row, rowIndex) => (
-                  <tr key={row.id} className={`transition ${rowIndex % 2 === 0 ? 'bg-gray-800/50' : 'bg-gray-800/20'} hover:bg-gray-700/50`}>
-                    {COLONNE_DA_VISUALIZZARE.map((col, colIndex) => {
-                      const isVisible = visibleColumns[col.key];
-                      return (
-                        <td key={`${row.id}-${col.key}`} className={`px-6 py-4 border-b border-gray-700 whitespace-nowrap ${getStickyClass(colIndex)} ${colIndex < 3 ? (rowIndex % 2 === 0 ? 'bg-gray-800' : 'bg-gray-800/80') : ''} ${!isVisible ? 'hidden' : ''} sm:table-cell`} contentEditable suppressContentEditableWarning={true} onBlur={(e) => {if (e.currentTarget.textContent !== String(row[col.key] || '')) {handleCellUpdate(row.id, col.key, e.currentTarget.textContent);}}}>
-                          {String(row[col.key] || '')}
-                        </td>
-                      );
-                    })}
+                {data.map((row, index) => (
+                  <tr key={row.id} className={`border-b border-gray-700 transition ${index % 2 === 0 ? 'bg-gray-800/50' : 'bg-gray-800/20'} hover:bg-gray-700/50`}>
+                    {COLONNE_DA_VISUALIZZARE.map(col => (
+                      <td key={`${row.id}-${col.key}`} className={`px-6 py-4 whitespace-nowrap ${col.key === 'note' ? 'whitespace-normal' : ''}`} contentEditable suppressContentEditableWarning={true} onBlur={(e) => {if (e.currentTarget.textContent !== String(row[col.key] || '')) {handleCellUpdate(row.id, col.key, e.currentTarget.textContent);}}}>
+                        {String(row[col.key] || '')}
+                      </td>
+                    ))}
                   </tr>
                 ))}
               </tbody>
             </table>
           )}
-           {data.length === 0 && !loading && (<p className="p-8 text-center text-gray-400">Nessun dato da visualizzare.</p>)}
+           {data.length === 0 && !loading && (<p className="p-8 text-center text-gray-400">Nessun dato da visualizzare. Prova ad aggiornare i dati da un file Excel.</p>)}
         </div>
         <footer className="text-center text-gray-500 mt-8 text-sm"><p>Realizzato con React, Netlify & Supabase</p></footer>
       </div>
