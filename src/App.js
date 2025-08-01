@@ -3,8 +3,8 @@
 import React, { useState, useEffect, useCallback } from 'react';
 
 // --- CONFIGURAZIONE SUPABASE ---
-const SUPABASE_URL = 'IL_TUO_URL_SUPABASE';
-const SUPABASE_ANON_KEY = 'LA_TUA_CHIAVE_ANON_SUPABASE';
+const SUPABASE_URL = 'https://vxbmwulmzmqmymqoxzjj.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZ4Ym13dWxtem1xbXltcW94empqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTM5NzQ3MzksImV4cCI6MjA2OTU1MDczOX0.9fU10_IpN0cNcjHmX9OQ1HLtdU1da-8nJ-LgvRWk7N4';
 const NOME_TABELLA = 'TaleviTurchi';
 
 // Definiamo l'ordine e i nomi delle colonne, aggiungendo larghezze minime per lo sticky
@@ -165,7 +165,22 @@ export default function App() {
           </div>
         </div>
 
-        {isUpdateUIVisible && ( /* ... UI di aggiornamento file ... */ )}
+        {/* --- CODICE CORRETTO PER LA UI DI AGGIORNAMENTO --- */}
+        {isUpdateUIVisible && (
+          <div className="bg-gray-800/50 rounded-lg p-6 mb-8 border border-gray-700 shadow-lg animate-fade-in">
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-xl font-semibold text-white">Aggiorna Dati da File Excel</h2>
+              <button onClick={() => setIsUpdateUIVisible(false)} className="text-gray-400 hover:text-white"><svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg></button>
+            </div>
+            <div className="flex flex-col sm:flex-row gap-4 items-center">
+              <input id="file-input" type="file" onChange={handleFileChange} accept=".xlsx, .xls" className="flex-grow file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-indigo-100 file:text-indigo-700 hover:file:bg-indigo-200 text-gray-400" />
+              <button onClick={handleUpdateFromFile} disabled={isUpdating || !selectedFile} className="bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-2 px-6 rounded-md transition duration-300 ease-in-out flex items-center justify-center disabled:bg-indigo-800 disabled:cursor-not-allowed">
+                {isUpdating ? 'Sincronizzando...' : 'Sincronizza'}
+              </button>
+            </div>
+            {error && <p className="text-red-400 mt-4">{error}</p>}
+          </div>
+        )}
         
         <div className="overflow-x-auto bg-gray-800/50 rounded-lg border border-gray-700 shadow-lg">
           {loading ? (<p className="p-8 text-center text-gray-400">Inizializzazione database...</p>) : (
