@@ -1,23 +1,17 @@
-// Versione FINALE con grafica e layout aggiornati
+// Versione FINALE con reset del file input per evitare problemi di cache
 
 import React, { useState, useEffect, useCallback } from 'react';
 
 // --- CONFIGURAZIONE SUPABASE ---
-// Assicurati che questi valori siano corretti!
 const SUPABASE_URL = 'https://vxbmwulmzmqmymqoxzjj.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZ4Ym13dWxtem1xbXltcW94empqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTM5NzQ3MzksImV4cCI6MjA2OTU1MDczOX0.9fU10_IpN0cNcjHmX9OQ1HLtdU1da-8nJ-LgvRWk7N4';
-const NOME_TABELLA = 'TaleviTurchi'; // Nuovo nome della tabella
+const NOME_TABELLA = 'TaleviTurchi';
 
-// Definiamo l'ordine e i nomi delle colonne da visualizzare
 const COLONNE_DA_VISUALIZZARE = [
-  { key: 'prog', label: 'Prog' },
-  { key: 'motrice', label: 'Motrice' },
-  { key: 'rimorchio', label: 'Rimorchio' },
-  { key: 'cliente', label: 'Cliente' },
-  { key: 'trasportatore', label: 'Trasportatore' },
-  { key: 'aci', label: 'ACI' },
-  { key: 'sigillo', label: 'Sigillo' },
-  { key: 'note', label: 'Note' },
+  { key: 'prog', label: 'Prog' }, { key: 'motrice', label: 'Motrice' },
+  { key: 'rimorchio', label: 'Rimorchio' }, { key: 'cliente', label: 'Cliente' },
+  { key: 'trasportatore', label: 'Trasportatore' }, { key: 'aci', label: 'ACI' },
+  { key: 'sigillo', label: 'Sigillo' }, { key: 'note', label: 'Note' },
 ];
 
 export default function App() {
@@ -59,6 +53,7 @@ export default function App() {
     setSelectedFile(event.target.files[0]);
   };
 
+  // Funzione di aggiornamento resa più robusta
   const handleUpdateFromFile = async () => {
     if (!selectedFile) {
       setError('Per favore, seleziona un file Excel.');
@@ -66,26 +61,40 @@ export default function App() {
     }
     setIsUpdating(true);
     setError(null);
+    
+    // Log di debug nel browser
+    console.log(`Sto per inviare il file: ${selectedFile.name}, dimensione: ${selectedFile.size} bytes`);
+
+    // Usiamo una Promise per gestire la lettura del file in modo pulito
+    const getBase64 = (file) => {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.readAsDataURL(file);
+        reader.onload = () => resolve(reader.result.split(',')[1]);
+        reader.onerror = error => reject(error);
+      });
+    };
 
     try {
-      const reader = new FileReader();
-      reader.readAsDataURL(selectedFile);
-      reader.onload = async () => {
-        const base64File = reader.result.split(',')[1];
-        const response = await fetch('/.netlify/functions/update-from-excel', {
-          method: 'POST',
-          body: JSON.stringify({ file: base64File }),
-        });
-        const result = await response.json();
-        if (!response.ok) throw new Error(result.error || 'Errore sconosciuto dal server.');
-        setSelectedFile(null); 
-        setIsUpdateUIVisible(false);
-        setIsUpdating(false);
-      };
-      reader.onerror = () => { throw new Error("Errore nella lettura del file."); };
+      const base64File = await getBase64(selectedFile);
+      
+      const response = await fetch('/.netlify/functions/update-from-excel', {
+        method: 'POST',
+        body: JSON.stringify({ file: base64File }),
+      });
+
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || 'Errore sconosciuto dal server.');
+      
+      // --- MODIFICA CHIAVE: Resettiamo il campo del file ---
+      document.getElementById('file-input').value = "";
+      setSelectedFile(null); 
+      setIsUpdateUIVisible(false);
+
     } catch (err) {
       console.error("Errore durante l'aggiornamento da Excel:", err);
       setError(`Errore: ${err.message}`);
+    } finally {
       setIsUpdating(false);
     }
   };
@@ -135,7 +144,7 @@ export default function App() {
               <button onClick={() => setIsUpdateUIVisible(false)} className="text-gray-400 hover:text-white"><svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg></button>
             </div>
             <div className="flex flex-col sm:flex-row gap-4 items-center">
-              <input type="file" onChange={handleFileChange} accept=".xlsx, .xls" className="flex-grow file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-indigo-100 file:text-indigo-700 hover:file:bg-indigo-200 text-gray-400" />
+              <input id="file-input" type="file" onChange={handleFileChange} accept=".xlsx, .xls" className="flex-grow file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-indigo-100 file:text-indigo-700 hover:file:bg-indigo-200 text-gray-400" />
               <button onClick={handleUpdateFromFile} disabled={isUpdating || !selectedFile} className="bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-2 px-6 rounded-md transition duration-300 ease-in-out flex items-center justify-center disabled:bg-indigo-800 disabled:cursor-not-allowed">
                 {isUpdating ? (<>...</>) : 'Sincronizza'}
               </button>
@@ -149,9 +158,7 @@ export default function App() {
               <thead className="bg-gray-700/50 text-sm text-gray-200 uppercase tracking-wider">
                 <tr>
                   {COLONNE_DA_VISUALIZZARE.map(col => (
-                    <th key={col.key} scope="col" className={`px-6 py-4 font-semibold ${col.key === 'note' ? 'w-1/3' : ''}`}>
-                      {col.label}
-                    </th>
+                    <th key={col.key} scope="col" className={`px-6 py-4 font-semibold ${col.key === 'note' ? 'w-1/3' : ''}`}>{col.label}</th>
                   ))}
                 </tr>
               </thead>
