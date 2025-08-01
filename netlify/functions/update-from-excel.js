@@ -1,9 +1,17 @@
-// Versione Definitiva: con nome tabella corretto e diagnostica
+// Versione Definitiva: con arrotondamento per eccesso della colonna ACI
 
 const xlsx = require('xlsx');
 
+// Funzione helper per arrotondare per eccesso al multiplo di 5
+const roundUpToMultipleOf5 = (num) => {
+  if (typeof num !== 'number' || isNaN(num)) {
+    return null; // Restituisce null se il valore non è un numero
+  }
+  return Math.ceil(num / 5) * 5;
+};
+
 exports.handler = async (event, context) => {
-  console.log("--- Funzione invocata (v. con Nome Tabella Corretto) ---");
+  console.log("--- Funzione invocata (v. con Arrotondamento ACI) ---");
 
   try {
     const { createClient } = require('@supabase/supabase-js');
@@ -14,12 +22,8 @@ exports.handler = async (event, context) => {
       throw new Error("Variabili d'ambiente Supabase non trovate.");
     }
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY);
-    console.log("Client Supabase inizializzato.");
-
-    // --- NOME TABELLA CORRETTO ---
+    
     const NOME_TABELLA = "TaleviTurchi";
-    // -----------------------------
-
     const NOME_FOGLIO = "Foglio1 (4)";
     
     if (event.httpMethod !== 'POST') {
@@ -50,25 +54,23 @@ exports.handler = async (event, context) => {
     const datiFiltrati = datiRaw
       .filter(rigaArray => rigaArray && rigaArray[0] !== undefined && rigaArray[0] !== null)
       .map(rigaArray => ({
-          prog: rigaArray[0], motrice: rigaArray[1], rimorchio: rigaArray[2],
-          cliente: rigaArray[3], trasportatore: rigaArray[4], aci: rigaArray[6],
-          sigillo: rigaArray[9], note: rigaArray[12] || null
+          prog: rigaArray[0],
+          motrice: rigaArray[1],
+          rimorchio: rigaArray[2],
+          cliente: rigaArray[3],
+          trasportatore: rigaArray[4],
+          // Applichiamo l'arrotondamento qui
+          aci: roundUpToMultipleOf5(parseFloat(rigaArray[6])),
+          sigillo: rigaArray[9],
+          note: rigaArray[12] || null
       }));
 
     if (datiFiltrati.length === 0) {
         return { statusCode: 400, body: JSON.stringify({ error: `Nessun dato valido trovato nel file.` }) };
     }
 
-    console.log("Dati pronti per essere inseriti:", datiFiltrati[0]);
-
-    // Usiamo il nome corretto della tabella
     await supabase.from(NOME_TABELLA).delete().neq('id', -1);
-    console.log(`Cancellazione completata dalla tabella: ${NOME_TABELLA}`);
-
-    // Usiamo il nome corretto della tabella
-    const { error: insertError } = await supabase.from(NOME_TABELLA).insert(datiFiltrati);
-    if (insertError) throw insertError;
-    console.log(`Inserimento completato nella tabella: ${NOME_TABELLA}`);
+    await supabase.from(NOME_TABELLA).insert(datiFiltrati);
 
     return {
       statusCode: 200,
