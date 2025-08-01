@@ -1,4 +1,4 @@
-// Versione FINALE: Riceve il file come stringa Base64
+// Versione FINALE: Legge un foglio specifico e colonne specifiche
 
 const xlsx = require('xlsx');
 const { createClient } = require('@supabase/supabase-js');
@@ -8,7 +8,22 @@ const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_KEY;
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY);
 
-const colonneDesiderate = ['Nome', 'Quantità', 'Prezzo_Unitario', 'Stato']; // Esempio
+// --- CONFIGURAZIONE SPECIFICA PER IL TUO FILE ---
+// 1. Inserisci qui il nome esatto del foglio Excel da leggere
+const NOME_FOGLIO = "Foglio 1 (4)";
+
+// 2. Inserisci qui i nomi esatti delle colonne che vuoi importare
+const COLONNE_DESIDERATE = [
+  'Prog',
+  'Motrice',
+  'Rimorchio',
+  'Cliente',
+  'Trasportatore',
+  'ACI',
+  'Sigillo',
+  'Note'
+];
+// ----------------------------------------------------
 
 exports.handler = async (event, context) => {
   if (event.httpMethod !== 'POST') {
@@ -21,35 +36,44 @@ exports.handler = async (event, context) => {
       return { statusCode: 400, body: JSON.stringify({ error: 'Nessun file ricevuto.' }) };
     }
 
-    // Converte la stringa Base64 in un buffer (dati grezzi)
     const fileBuffer = Buffer.from(base64File, 'base64');
-
     const workbook = xlsx.read(fileBuffer, { type: 'buffer' });
-    const sheetName = workbook.SheetNames[0];
-    const worksheet = workbook.Sheets[sheetName];
+
+    // Cerca il foglio specifico per nome
+    const worksheet = workbook.Sheets[NOME_FOGLIO];
+    if (!worksheet) {
+      throw new Error(`Foglio di lavoro "${NOME_FOGLIO}" non trovato nel file Excel. Controlla il nome.`);
+    }
+
     const jsonData = xlsx.utils.sheet_to_json(worksheet);
 
     if (jsonData.length === 0) {
-        return { statusCode: 400, body: JSON.stringify({ error: 'Il file Excel sembra essere vuoto.' }) };
+        return { statusCode: 400, body: JSON.stringify({ error: `Il foglio "${NOME_FOGLIO}" sembra essere vuoto.` }) };
     }
     
+    // Filtra i dati per includere solo le colonne desiderate
     const datiFiltrati = jsonData.map(riga => {
         const nuovaRiga = {};
-        colonneDesiderate.forEach(nomeColonna => {
-            if (riga[nomeColonna] !== undefined) {
-                const nomeColonnaSupabase = nomeColonna.replace(/ /g, '_');
-                nuovaRiga[nomeColonnaSupabase] = riga[nomeColonna];
-            }
+        COLONNE_DESIDERATE.forEach(nomeColonna => {
+            // Supabase non ama gli spazi nei nomi delle colonne, li sostituiamo
+            const nomeColonnaSupabase = nomeColonna.replace(/ /g, '_');
+            // Aggiungiamo il valore solo se esiste, altrimenti mettiamo null
+            nuovaRiga[nomeColonnaSupabase] = riga[nomeColonna] !== undefined ? riga[nomeColonna] : null;
         });
         return nuovaRiga;
     });
 
-    await supabase.from('dati_tabella').delete().neq('id', -1); 
-    await supabase.from('dati_tabella').insert(datiFiltrati);
+    // Svuota la tabella prima di inserire i nuovi dati
+    const { error: deleteError } = await supabase.from('dati_tabella').delete().neq('id', -1);
+    if (deleteError) throw deleteError;
+
+    // Inserisce i nuovi dati filtrati
+    const { error: insertError } = await supabase.from('dati_tabella').insert(datiFiltrati);
+    if (insertError) throw insertError;
 
     return {
       statusCode: 200,
-      body: JSON.stringify({ message: `Dati aggiornati con successo.` }),
+      body: JSON.stringify({ message: `Dati aggiornati con successo. ${datiFiltrati.length} righe inserite.` }),
     };
 
   } catch (error) {
