@@ -1,4 +1,4 @@
-// Versione FINALE: Legge un foglio specifico e colonne specifiche
+// Versione FINALE: Gestisce correttamente maiuscole/minuscole
 
 const xlsx = require('xlsx');
 const { createClient } = require('@supabase/supabase-js');
@@ -9,19 +9,18 @@ const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_KEY;
 const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY);
 
 // --- CONFIGURAZIONE SPECIFICA PER IL TUO FILE ---
-// 1. Inserisci qui il nome esatto del foglio Excel da leggere
-const NOME_FOGLIO = "Foglio1 (4)"; // Lasciamo questo per ora, lo correggeremo se necessario
+const NOME_FOGLIO = "Foglio1 (4)";
 
-// 2. Inserisci qui i nomi esatti delle colonne che vuoi importare
+// 2. Inserisci qui i nomi esatti delle colonne, rispettando le maiuscole/minuscole del file Excel
 const COLONNE_DESIDERATE = [
-  'Prog',
-  'Motrice',
-  'Rimorchio',
-  'Cliente',
-  'Trasportatore',
+  'PROG',
+  'MOTRICE',
+  'RIMORCHIO',
+  'CLIENTE',
+  'TRASPORTATORE',
   'ACI',
-  'Sigillo',
-  'Note'
+  'Sigillo', // Come da tua indicazione, questa non è in maiuscolo
+  'NOTE'
 ];
 // ----------------------------------------------------
 
@@ -39,15 +38,10 @@ exports.handler = async (event, context) => {
     const fileBuffer = Buffer.from(base64File, 'base64');
     const workbook = xlsx.read(fileBuffer, { type: 'buffer' });
 
-    // --- NUOVO CODICE DI DEBUG ---
-    // Stampiamo nei log tutti i nomi dei fogli trovati nel file
     console.log("Fogli trovati nel file:", workbook.SheetNames);
-    // -----------------------------
 
-    // Cerca il foglio specifico per nome
     const worksheet = workbook.Sheets[NOME_FOGLIO];
     if (!worksheet) {
-      // Restituiamo un errore più dettagliato
       throw new Error(`Foglio di lavoro "${NOME_FOGLIO}" non trovato. Fogli disponibili: [${workbook.SheetNames.join(", ")}]`);
     }
 
@@ -57,12 +51,15 @@ exports.handler = async (event, context) => {
         return { statusCode: 400, body: JSON.stringify({ error: `Il foglio "${NOME_FOGLIO}" sembra essere vuoto.` }) };
     }
     
-    // Filtra i dati per includere solo le colonne desiderate
+    // Filtra i dati e converte i nomi delle colonne in minuscolo per Supabase
     const datiFiltrati = jsonData.map(riga => {
         const nuovaRiga = {};
-        COLONNE_DESIDERATE.forEach(nomeColonna => {
-            const nomeColonnaSupabase = nomeColonna.replace(/ /g, '_');
-            nuovaRiga[nomeColonnaSupabase] = riga[nomeColonna] !== undefined ? riga[nomeColonna] : null;
+        COLONNE_DESIDERATE.forEach(nomeColonnaExcel => {
+            // Il nome della colonna per Supabase è sempre minuscolo
+            const nomeColonnaSupabase = nomeColonnaExcel.replace(/ /g, '_').toLowerCase();
+            
+            // Leggiamo dalla riga usando il nome originale (con le maiuscole giuste)
+            nuovaRiga[nomeColonnaSupabase] = riga[nomeColonnaExcel] !== undefined ? riga[nomeColonnaExcel] : null;
         });
         return nuovaRiga;
     });
