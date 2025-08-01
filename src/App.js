@@ -1,16 +1,30 @@
-// Versione FINALE con upload diretto del file
+// Versione FINALE con grafica e layout aggiornati
 
 import React, { useState, useEffect, useCallback } from 'react';
 
+// --- CONFIGURAZIONE SUPABASE ---
 // Assicurati che questi valori siano corretti!
 const SUPABASE_URL = 'https://vxbmwulmzmqmymqoxzjj.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZ4Ym13dWxtem1xbXltcW94empqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTM5NzQ3MzksImV4cCI6MjA2OTU1MDczOX0.9fU10_IpN0cNcjHmX9OQ1HLtdU1da-8nJ-LgvRWk7N4';
+const NOME_TABELLA = 'TaleviTurchi'; // Nuovo nome della tabella
+
+// Definiamo l'ordine e i nomi delle colonne da visualizzare
+const COLONNE_DA_VISUALIZZARE = [
+  { key: 'prog', label: 'Prog' },
+  { key: 'motrice', label: 'Motrice' },
+  { key: 'rimorchio', label: 'Rimorchio' },
+  { key: 'cliente', label: 'Cliente' },
+  { key: 'trasportatore', label: 'Trasportatore' },
+  { key: 'aci', label: 'ACI' },
+  { key: 'sigillo', label: 'Sigillo' },
+  { key: 'note', label: 'Note' },
+];
 
 export default function App() {
   const [data, setData] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [selectedFile, setSelectedFile] = useState(null); // Nuovo stato per il file
+  const [selectedFile, setSelectedFile] = useState(null);
   const [isUpdating, setIsUpdating] = useState(false);
   const [supabaseClient, setSupabaseClient] = useState(null);
   const [isUpdateUIVisible, setIsUpdateUIVisible] = useState(false);
@@ -20,7 +34,7 @@ export default function App() {
     setLoading(true);
     setError(null);
     try {
-      const { data: tableData, error } = await client.from('dati_tabella').select('*').order('id', { ascending: true });
+      const { data: tableData, error } = await client.from(NOME_TABELLA).select('*').order('prog', { ascending: true });
       if (error) throw error;
       setData(tableData || []);
     } catch (err) {
@@ -34,19 +48,17 @@ export default function App() {
   const handleCellUpdate = async (id, column, value) => {
     if (!supabaseClient) return;
     try {
-      const { error } = await supabaseClient.from('dati_tabella').update({ [column]: value }).eq('id', id);
+      const { error } = await supabaseClient.from(NOME_TABELLA).update({ [column]: value }).eq('id', id);
       if (error) throw error;
     } catch (err) {
       console.error("Errore nell'aggiornamento della cella:", err);
     }
   };
   
-  // Funzione per gestire la selezione del file
   const handleFileChange = (event) => {
     setSelectedFile(event.target.files[0]);
   };
 
-  // Funzione per avviare l'aggiornamento dal file caricato
   const handleUpdateFromFile = async () => {
     if (!selectedFile) {
       setError('Per favore, seleziona un file Excel.');
@@ -56,28 +68,21 @@ export default function App() {
     setError(null);
 
     try {
-      // Convertiamo il file in Base64 per inviarlo alla funzione
       const reader = new FileReader();
       reader.readAsDataURL(selectedFile);
       reader.onload = async () => {
         const base64File = reader.result.split(',')[1];
-
         const response = await fetch('/.netlify/functions/update-from-excel', {
           method: 'POST',
           body: JSON.stringify({ file: base64File }),
         });
-
         const result = await response.json();
         if (!response.ok) throw new Error(result.error || 'Errore sconosciuto dal server.');
-        
         setSelectedFile(null); 
         setIsUpdateUIVisible(false);
         setIsUpdating(false);
       };
-      reader.onerror = (error) => {
-        throw new Error("Errore nella lettura del file.");
-      };
-
+      reader.onerror = () => { throw new Error("Errore nella lettura del file."); };
     } catch (err) {
       console.error("Errore durante l'aggiornamento da Excel:", err);
       setError(`Errore: ${err.message}`);
@@ -93,13 +98,9 @@ export default function App() {
       if (window.supabase) {
         const client = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
         setSupabaseClient(client);
-      } else {
-        setError("Libreria caricata, ma 'supabase' non trovato.");
-      }
+      } else { setError("Libreria caricata, ma 'supabase' non trovato."); }
     };
-    script.onerror = () => {
-      setError("Impossibile caricare la libreria del database.");
-    };
+    script.onerror = () => { setError("Impossibile caricare la libreria del database."); };
     document.body.appendChild(script);
     return () => { document.body.removeChild(script); }
   }, []);
@@ -107,7 +108,7 @@ export default function App() {
   useEffect(() => {
     if (supabaseClient) {
       fetchData(supabaseClient);
-      const channel = supabaseClient.channel('dati_tabella_changes').on('postgres_changes', { event: '*', schema: 'public', table: 'dati_tabella' }, (payload) => { fetchData(supabaseClient); }).subscribe();
+      const channel = supabaseClient.channel(`realtime:${NOME_TABELLA}`).on('postgres_changes', { event: '*', schema: 'public', table: NOME_TABELLA }, () => { fetchData(supabaseClient); }).subscribe();
       return () => { supabaseClient.removeChannel(channel); };
     }
   }, [supabaseClient, fetchData]);
@@ -117,7 +118,7 @@ export default function App() {
       <div className="max-w-7xl mx-auto">
         <header className="mb-8 flex justify-between items-start gap-4">
           <div>
-            <h1 className="text-4xl font-bold text-white tracking-tight">Dashboard Dati Dinamica</h1>
+            <h1 className="text-4xl font-bold text-white tracking-tight">Talevi & Turchi Dashboard</h1>
             <p className="text-gray-400 mt-2">Dati aggiornati in tempo reale. Clicca il pulsante per sincronizzare da un file Excel.</p>
           </div>
           {!isUpdateUIVisible && (
@@ -136,30 +137,38 @@ export default function App() {
             <div className="flex flex-col sm:flex-row gap-4 items-center">
               <input type="file" onChange={handleFileChange} accept=".xlsx, .xls" className="flex-grow file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-indigo-100 file:text-indigo-700 hover:file:bg-indigo-200 text-gray-400" />
               <button onClick={handleUpdateFromFile} disabled={isUpdating || !selectedFile} className="bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-2 px-6 rounded-md transition duration-300 ease-in-out flex items-center justify-center disabled:bg-indigo-800 disabled:cursor-not-allowed">
-                {isUpdating ? (<><svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>Sincronizzando...</>) : 'Sincronizza'}
+                {isUpdating ? (<>...</>) : 'Sincronizza'}
               </button>
             </div>
             {error && <p className="text-red-400 mt-4">{error}</p>}
           </div>
         )}
         <div className="overflow-x-auto bg-gray-800/50 rounded-lg border border-gray-700 shadow-lg">
-          {loading ? (<p className="p-6 text-center text-gray-400">Inizializzazione database...</p>) : (
-            <table className="min-w-full text-sm text-left text-gray-300">
-              <thead className="bg-gray-700/50 text-xs text-gray-300 uppercase tracking-wider">
-                <tr>{data.length > 0 && Object.keys(data[0]).map(key => (<th key={key} scope="col" className="px-6 py-3 font-medium">{key.replace(/_/g, ' ')}</th>))}</tr>
+          {loading ? (<p className="p-8 text-center text-gray-400">Inizializzazione database...</p>) : (
+            <table className="min-w-full text-base text-left text-gray-300">
+              <thead className="bg-gray-700/50 text-sm text-gray-200 uppercase tracking-wider">
+                <tr>
+                  {COLONNE_DA_VISUALIZZARE.map(col => (
+                    <th key={col.key} scope="col" className={`px-6 py-4 font-semibold ${col.key === 'note' ? 'w-1/3' : ''}`}>
+                      {col.label}
+                    </th>
+                  ))}
+                </tr>
               </thead>
               <tbody>
-                {data.map((row) => (
-                  <tr key={row.id} className="border-b border-gray-700 hover:bg-gray-700/30 transition">
-                    {Object.entries(row).map(([key, value]) => (
-                      <td key={`${row.id}-${key}`} className="px-6 py-4 whitespace-nowrap" contentEditable={key !== 'id'} suppressContentEditableWarning={true} onBlur={(e) => {if (e.currentTarget.textContent !== String(value)) {handleCellUpdate(row.id, key, e.currentTarget.textContent);}}}>{String(value)}</td>
+                {data.map((row, index) => (
+                  <tr key={row.id} className={`border-b border-gray-700 transition ${index % 2 === 0 ? 'bg-gray-800/50' : 'bg-gray-800/20'} hover:bg-gray-700/50`}>
+                    {COLONNE_DA_VISUALIZZARE.map(col => (
+                      <td key={`${row.id}-${col.key}`} className={`px-6 py-4 whitespace-nowrap ${col.key === 'note' ? 'whitespace-normal' : ''}`} contentEditable suppressContentEditableWarning={true} onBlur={(e) => {if (e.currentTarget.textContent !== String(row[col.key] || '')) {handleCellUpdate(row.id, col.key, e.currentTarget.textContent);}}}>
+                        {String(row[col.key] || '')}
+                      </td>
                     ))}
                   </tr>
                 ))}
               </tbody>
             </table>
           )}
-           {data.length === 0 && !loading && (<p className="p-6 text-center text-gray-400">Nessun dato da visualizzare. Prova ad aggiornare i dati da un file Excel.</p>)}
+           {data.length === 0 && !loading && (<p className="p-8 text-center text-gray-400">Nessun dato da visualizzare. Prova ad aggiornare i dati da un file Excel.</p>)}
         </div>
         <footer className="text-center text-gray-500 mt-8 text-sm"><p>Realizzato con React, Netlify & Supabase</p></footer>
       </div>
