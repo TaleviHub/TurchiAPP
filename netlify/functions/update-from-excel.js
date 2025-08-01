@@ -1,10 +1,9 @@
-// Versione Definitiva: Lettura manuale per posizione esatta delle colonne
+// Versione Definitiva: con verifica post-inserimento
 
 const xlsx = require('xlsx');
 
 exports.handler = async (event, context) => {
-  // Questo log deve apparire per forza
-  console.log("--- Funzione invocata (v. Lettura per Posizione) ---");
+  console.log("--- Funzione invocata (v. con Verifica Finale) ---");
 
   try {
     const { createClient } = require('@supabase/supabase-js');
@@ -35,59 +34,48 @@ exports.handler = async (event, context) => {
       throw new Error(`Foglio di lavoro "${NOME_FOGLIO}" non trovato.`);
     }
 
-    // --- NUOVA LOGICA DI LETTURA PER POSIZIONE ---
     const righeRaw = xlsx.utils.sheet_to_json(worksheet, { header: 1 });
-
     const indiceIntestazioni = righeRaw.findIndex(riga => riga && riga.includes('PROG'));
     if (indiceIntestazioni === -1) {
       throw new Error("Riga delle intestazioni con 'PROG' non trovata.");
     }
     
-    // I dati iniziano due righe dopo le intestazioni
     const datiRaw = righeRaw.slice(indiceIntestazioni + 2);
 
     const datiFiltrati = datiRaw
-      // Filtriamo le righe che non hanno un valore nella prima colonna ('PROG')
       .filter(rigaArray => rigaArray && rigaArray[0] !== undefined && rigaArray[0] !== null)
-      .map(rigaArray => {
-        // Leggiamo i dati in base alla loro posizione esatta nella riga
-        // Le posizioni (0, 1, 2...) corrispondono alle colonne A, B, C...
-        return {
-          prog: rigaArray[0],          // Colonna 1 (A)
-          motrice: rigaArray[1],       // Colonna 2 (B)
-          rimorchio: rigaArray[2],     // Colonna 3 (C)
-          cliente: rigaArray[3],       // Colonna 4 (D)
-          trasportatore: rigaArray[4], // Colonna 5 (E)
-          aci: rigaArray[6],           // Colonna 7 (G)
-          sigillo: rigaArray[9],       // Colonna 10 (J)
-          note: rigaArray[12] || null  // Colonna 13 (M), se è vuota mettiamo null
-        };
-    });
-    // --- FINE NUOVA LOGICA ---
-
-    // --- DIAGNOSTICA AVANZATA ---
-    console.log("--- INIZIO DIAGNOSTICA FILE ---");
-    if (datiFiltrati.length > 0) {
-      console.log("Numero di righe valide trovate:", datiFiltrati.length);
-      console.log("Contenuto della prima riga di dati elaborata:", datiFiltrati[0]);
-    } else {
-      console.log("Nessuna riga di dati valida trovata dopo le intestazioni.");
-    }
-    console.log("--- FINE DIAGNOSTICA FILE ---");
+      .map(rigaArray => ({
+          prog: rigaArray[0], motrice: rigaArray[1], rimorchio: rigaArray[2],
+          cliente: rigaArray[3], trasportatore: rigaArray[4], aci: rigaArray[6],
+          sigillo: rigaArray[9], note: rigaArray[12] || null
+      }));
 
     if (datiFiltrati.length === 0) {
         return { statusCode: 400, body: JSON.stringify({ error: `Nessun dato valido trovato nel file.` }) };
     }
 
-    console.log("Tentativo di cancellare i vecchi dati...");
-    const { error: deleteError } = await supabase.from('dati_tabella').delete().neq('id', -1);
-    if (deleteError) throw deleteError;
+    console.log("Dati pronti per essere inseriti:", datiFiltrati[0]);
+
+    await supabase.from('dati_tabella').delete().neq('id', -1);
     console.log("Cancellazione completata.");
 
-    console.log("Tentativo di inserire i nuovi dati...");
-    const { error: insertError } = await supabase.from('dati_tabella').insert(datiFiltrati);
+    // Modifichiamo l'inserimento per ricevere una risposta
+    const { data: righeInserite, error: insertError } = await supabase
+      .from('dati_tabella')
+      .insert(datiFiltrati)
+      .select(); // Chiediamo a Supabase di restituirci quello che ha inserito
+
     if (insertError) throw insertError;
     console.log("Inserimento completato.");
+
+    // --- DIAGNOSTICA FINALE ---
+    console.log("--- VERIFICA DATI INSERITI ---");
+    if (righeInserite && righeInserite.length > 0) {
+      console.log("Supabase conferma di aver inserito questo (prima riga):", righeInserite[0]);
+    } else {
+      console.log("Supabase non ha restituito le righe inserite. Potrebbe esserci ancora un problema di permessi.");
+    }
+    console.log("--- FINE VERIFICA ---");
 
     return {
       statusCode: 200,
