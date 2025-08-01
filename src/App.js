@@ -1,4 +1,4 @@
-// Versione con logging di debug avanzato
+// Versione FINALE con upload diretto del file
 
 import React, { useState, useEffect, useCallback } from 'react';
 
@@ -10,7 +10,7 @@ export default function App() {
   const [data, setData] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [link, setLink] = useState('');
+  const [selectedFile, setSelectedFile] = useState(null); // Nuovo stato per il file
   const [isUpdating, setIsUpdating] = useState(false);
   const [supabaseClient, setSupabaseClient] = useState(null);
   const [isUpdateUIVisible, setIsUpdateUIVisible] = useState(false);
@@ -24,7 +24,7 @@ export default function App() {
       if (error) throw error;
       setData(tableData || []);
     } catch (err) {
-      console.error("DEBUG: Errore nel caricamento dati:", err);
+      console.error("Errore nel caricamento dati:", err);
       setError('Impossibile caricare i dati dal database.');
     } finally {
       setLoading(false);
@@ -37,79 +37,75 @@ export default function App() {
       const { error } = await supabaseClient.from('dati_tabella').update({ [column]: value }).eq('id', id);
       if (error) throw error;
     } catch (err) {
-      console.error("DEBUG: Errore nell'aggiornamento della cella:", err);
+      console.error("Errore nell'aggiornamento della cella:", err);
     }
   };
   
-  const handleUpdateFromExcel = async () => {
-    if (!link) {
-      setError('Per favore, inserisci un link di condivisione di OneDrive.');
+  // Funzione per gestire la selezione del file
+  const handleFileChange = (event) => {
+    setSelectedFile(event.target.files[0]);
+  };
+
+  // Funzione per avviare l'aggiornamento dal file caricato
+  const handleUpdateFromFile = async () => {
+    if (!selectedFile) {
+      setError('Per favore, seleziona un file Excel.');
       return;
     }
     setIsUpdating(true);
     setError(null);
+
     try {
-      const response = await fetch('/.netlify/functions/update-from-excel', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ oneDriveLink: link }),
-      });
-      const result = await response.json();
-      if (!response.ok) throw new Error(result.error || 'Errore sconosciuto dal server.');
-      setLink(''); 
-      setIsUpdateUIVisible(false);
+      // Convertiamo il file in Base64 per inviarlo alla funzione
+      const reader = new FileReader();
+      reader.readAsDataURL(selectedFile);
+      reader.onload = async () => {
+        const base64File = reader.result.split(',')[1];
+
+        const response = await fetch('/.netlify/functions/update-from-excel', {
+          method: 'POST',
+          body: JSON.stringify({ file: base64File }),
+        });
+
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.error || 'Errore sconosciuto dal server.');
+        
+        setSelectedFile(null); 
+        setIsUpdateUIVisible(false);
+        setIsUpdating(false);
+      };
+      reader.onerror = (error) => {
+        throw new Error("Errore nella lettura del file.");
+      };
+
     } catch (err) {
-      console.error("DEBUG: Errore durante l'aggiornamento da Excel:", err);
+      console.error("Errore durante l'aggiornamento da Excel:", err);
       setError(`Errore: ${err.message}`);
-    } finally {
       setIsUpdating(false);
     }
   };
 
-  // --- LOGICA DI CARICAMENTO CON DEBUGGING ---
   useEffect(() => {
-    console.log("DEBUG: L'app si è montata. Inizio caricamento Supabase.");
-    
-    if (document.querySelector('script[src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"]')) {
-        console.log("DEBUG: Lo script Supabase era già presente.");
-        if (window.supabase) {
-            setSupabaseClient(window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY));
-        }
-        return;
-    }
-
     const script = document.createElement('script');
     script.src = 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2';
     script.async = true;
-    
-    console.log("DEBUG: Creato tag script, ora lo aggiungo alla pagina.");
-
     script.onload = () => {
-      console.log("DEBUG: L'evento 'onload' dello script è stato attivato.");
       if (window.supabase) {
-        console.log("DEBUG: 'window.supabase' trovato! Creo il client.");
         const client = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
         setSupabaseClient(client);
-        console.log("DEBUG: Client Supabase creato e impostato nello stato.");
       } else {
-        console.error("DEBUG: ERRORE CRITICO - 'onload' attivato ma 'window.supabase' non esiste.");
-        setError("Libreria caricata, ma 'supabase' non trovato. Riprova a ricaricare la pagina.");
+        setError("Libreria caricata, ma 'supabase' non trovato.");
       }
     };
-
-    script.onerror = (e) => {
-      console.error("DEBUG: ERRORE CRITICO - L'evento 'onerror' dello script è stato attivato.", e);
-      setError("Impossibile caricare la libreria del database. Controlla la connessione o eventuali ad-blocker.");
+    script.onerror = () => {
+      setError("Impossibile caricare la libreria del database.");
     };
-
     document.body.appendChild(script);
-    console.log("DEBUG: Script aggiunto al body del documento.");
-
+    return () => { document.body.removeChild(script); }
   }, []);
 
   useEffect(() => {
     if (supabaseClient) {
-      console.log("DEBUG: Il client Supabase è pronto. Carico i dati e mi metto in ascolto.");
       fetchData(supabaseClient);
       const channel = supabaseClient.channel('dati_tabella_changes').on('postgres_changes', { event: '*', schema: 'public', table: 'dati_tabella' }, (payload) => { fetchData(supabaseClient); }).subscribe();
       return () => { supabaseClient.removeChannel(channel); };
@@ -134,12 +130,12 @@ export default function App() {
         {isUpdateUIVisible && (
           <div className="bg-gray-800/50 rounded-lg p-6 mb-8 border border-gray-700 shadow-lg animate-fade-in">
             <div className="flex justify-between items-center mb-4">
-              <h2 className="text-xl font-semibold text-white">Aggiorna Dati da Excel</h2>
+              <h2 className="text-xl font-semibold text-white">Aggiorna Dati da File Excel</h2>
               <button onClick={() => setIsUpdateUIVisible(false)} className="text-gray-400 hover:text-white"><svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg></button>
             </div>
-            <div className="flex flex-col sm:flex-row gap-4">
-              <input type="text" value={link} onChange={(e) => setLink(e.target.value)} placeholder="Incolla qui il link di condivisione di OneDrive..." className="flex-grow bg-gray-700 border border-gray-600 rounded-md px-4 py-2 text-white placeholder-gray-500 focus:ring-2 focus:ring-indigo-500 focus:outline-none transition" disabled={isUpdating || !supabaseClient} />
-              <button onClick={handleUpdateFromExcel} disabled={isUpdating || !supabaseClient} className="bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-2 px-6 rounded-md transition duration-300 ease-in-out flex items-center justify-center disabled:bg-indigo-800 disabled:cursor-not-allowed">
+            <div className="flex flex-col sm:flex-row gap-4 items-center">
+              <input type="file" onChange={handleFileChange} accept=".xlsx, .xls" className="flex-grow file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-indigo-100 file:text-indigo-700 hover:file:bg-indigo-200 text-gray-400" />
+              <button onClick={handleUpdateFromFile} disabled={isUpdating || !selectedFile} className="bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-2 px-6 rounded-md transition duration-300 ease-in-out flex items-center justify-center disabled:bg-indigo-800 disabled:cursor-not-allowed">
                 {isUpdating ? (<><svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>Sincronizzando...</>) : 'Sincronizza'}
               </button>
             </div>

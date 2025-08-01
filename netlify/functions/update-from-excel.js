@@ -1,4 +1,4 @@
-// Versione v3: Aggiunto User-Agent e logging di errore dettagliato
+// Versione FINALE: Riceve il file come stringa Base64
 
 const xlsx = require('xlsx');
 const { createClient } = require('@supabase/supabase-js');
@@ -11,50 +11,23 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY);
 const colonneDesiderate = ['Nome', 'Quantità', 'Prezzo_Unitario', 'Stato']; // Esempio
 
 exports.handler = async (event, context) => {
-  console.log("--- Funzione 'update-from-excel' invocata (v3 - User Agent) ---");
-
   if (event.httpMethod !== 'POST') {
     return { statusCode: 405, body: JSON.stringify({ error: 'Metodo non consentito' }) };
   }
 
-  const fetch = (await import('node-fetch')).default;
-  console.log("Libreria node-fetch importata.");
-
   try {
-    const { oneDriveLink } = JSON.parse(event.body);
-    if (!oneDriveLink) {
-      return { statusCode: 400, body: JSON.stringify({ error: 'Link di OneDrive mancante' }) };
+    const { file: base64File } = JSON.parse(event.body);
+    if (!base64File) {
+      return { statusCode: 400, body: JSON.stringify({ error: 'Nessun file ricevuto.' }) };
     }
-    console.log("Link ricevuto:", oneDriveLink);
 
-    const directDownloadLink = `${oneDriveLink}&download=1`;
-    console.log("Tento il download diretto da:", directDownloadLink);
-    
-    // Aggiungiamo un User-Agent per simulare un browser
-    const fetchOptions = {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
-      }
-    };
-
-    const fileResponse = await fetch(directDownloadLink, fetchOptions);
-    console.log("Risposta dal server di download. Status:", fileResponse.status);
-
-    if (!fileResponse.ok) {
-      // --- NUOVO LOGGING DI ERRORE ---
-      // Se la richiesta fallisce, proviamo a leggere il corpo della risposta
-      const errorBody = await fileResponse.text();
-      console.error("Corpo della risposta di errore da OneDrive:", errorBody);
-      throw new Error(`Impossibile scaricare il file. Status: ${fileResponse.status}. Controlla i log della funzione Netlify per i dettagli.`);
-    }
-    const fileBuffer = await fileResponse.buffer();
-    console.log("File scaricato. Dimensione:", fileBuffer.byteLength);
+    // Converte la stringa Base64 in un buffer (dati grezzi)
+    const fileBuffer = Buffer.from(base64File, 'base64');
 
     const workbook = xlsx.read(fileBuffer, { type: 'buffer' });
     const sheetName = workbook.SheetNames[0];
     const worksheet = workbook.Sheets[sheetName];
     const jsonData = xlsx.utils.sheet_to_json(worksheet);
-    console.log(jsonData.length, "righe trovate nel file Excel.");
 
     if (jsonData.length === 0) {
         return { statusCode: 400, body: JSON.stringify({ error: 'Il file Excel sembra essere vuoto.' }) };
@@ -71,23 +44,16 @@ exports.handler = async (event, context) => {
         return nuovaRiga;
     });
 
-    console.log("Cancellazione dei vecchi dati...");
-    const { error: deleteError } = await supabase.from('dati_tabella').delete().neq('id', -1); 
-    if (deleteError) throw deleteError;
-    console.log("Vecchi dati cancellati.");
-
-    console.log("Inserimento dei nuovi dati...");
-    const { error: insertError } = await supabase.from('dati_tabella').insert(datiFiltrati);
-    if (insertError) throw insertError;
-    console.log("Nuovi dati inseriti.");
+    await supabase.from('dati_tabella').delete().neq('id', -1); 
+    await supabase.from('dati_tabella').insert(datiFiltrati);
 
     return {
       statusCode: 200,
-      body: JSON.stringify({ message: `Dati aggiornati con successo. ${datiFiltrati.length} righe inserite.` }),
+      body: JSON.stringify({ message: `Dati aggiornati con successo.` }),
     };
 
   } catch (error) {
-    console.error('--- ERRORE CRITICO NELLA FUNZIONE ---:', error);
+    console.error('ERRORE NELLA FUNZIONE:', error);
     return {
       statusCode: 500,
       body: JSON.stringify({ error: error.message }),
