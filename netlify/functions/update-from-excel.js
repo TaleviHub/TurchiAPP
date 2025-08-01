@@ -6,7 +6,7 @@ const xlsx = require('xlsx');
 
 exports.handler = async (event, context) => {
   // Questo log deve apparire per forza
-  console.log("--- Funzione invocata (versione con init sicuro) ---");
+  console.log("--- Funzione invocata (versione con init sicuro e diagnostica) ---");
 
   try {
     const { createClient } = require('@supabase/supabase-js');
@@ -15,14 +15,12 @@ exports.handler = async (event, context) => {
     const SUPABASE_URL = process.env.SUPABASE_URL;
     const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_KEY;
 
-    // --- DIAGNOSTICA DELLE CHIAVI ---
     if (!SUPABASE_URL || !SUPABASE_SERVICE_KEY) {
       console.error("ERRORE: Variabili d'ambiente SUPABASE_URL o SUPABASE_SERVICE_KEY non trovate!");
-      throw new Error("Configurazione del server incompleta. Contatta l'amministratore.");
+      throw new Error("Configurazione del server incompleta.");
     }
     console.log("Variabili d'ambiente lette correttamente.");
-    // ------------------------------------
-
+    
     // Inizializziamo il client qui, dentro il blocco try/catch
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY);
     console.log("Client Supabase inizializzato con successo.");
@@ -30,7 +28,7 @@ exports.handler = async (event, context) => {
     // --- CONFIGURAZIONE SPECIFICA PER IL TUO FILE ---
     const NOME_FOGLIO = "Foglio1 (4)";
     const COLONNE_DESIDERATE = [
-      'PROG', 'MOTRICE', 'RIMORCHIO', 'CLIENTE', 
+      'PROG', 'MOTRICE', 'RIMORCHIO', 'CLIENTE',
       'TRASPORTATORE', 'ACI', 'Sigillo', 'NOTE'
     ];
     // ----------------------------------------------------
@@ -46,7 +44,7 @@ exports.handler = async (event, context) => {
 
     const fileBuffer = Buffer.from(base64File, 'base64');
     const workbook = xlsx.read(fileBuffer, { type: 'buffer' });
-    
+
     const worksheet = workbook.Sheets[NOME_FOGLIO];
     if (!worksheet) {
       throw new Error(`Foglio di lavoro "${NOME_FOGLIO}" non trovato.`);
@@ -58,39 +56,47 @@ exports.handler = async (event, context) => {
       throw new Error("Riga delle intestazioni con 'PROG' non trovata.");
     }
     const intestazioni = righeRaw[indiceIntestazioni].map(h => typeof h === 'string' ? h.trim() : h);
+    
+    const columnIndexMap = {};
+    COLONNE_DESIDERATE.forEach(nomeColonna => {
+      const index = intestazioni.findIndex(h => h === nomeColonna);
+      if (index !== -1) {
+        columnIndexMap[nomeColonna] = index;
+      }
+    });
+    
     const datiRaw = righeRaw.slice(indiceIntestazioni + 2);
-    const jsonData = datiRaw
-      .filter(rigaArray => rigaArray && rigaArray.length > 0 && rigaArray[0] !== undefined && rigaArray[0] !== null)
+    const datiFiltrati = datiRaw
+      .filter(rigaArray => rigaArray && rigaArray[columnIndexMap['PROG']] !== undefined && rigaArray[columnIndexMap['PROG']] !== null)
       .map(rigaArray => {
-        const obj = {};
-        intestazioni.forEach((intestazione, i) => {
-          if (intestazione) { obj[intestazione] = rigaArray[i]; }
+        const nuovaRiga = {};
+        COLONNE_DESIDERATE.forEach(nomeColonnaExcel => {
+            const nomeColonnaSupabase = nomeColonnaExcel.replace(/ /g, '_').toLowerCase();
+            const colIndex = columnIndexMap[nomeColonnaExcel];
+            
+            if (colIndex !== undefined) {
+              nuovaRiga[nomeColonnaSupabase] = rigaArray[colIndex] !== undefined ? rigaArray[colIndex] : null;
+            } else {
+              nuovaRiga[nomeColonnaSupabase] = null;
+            }
         });
-        return obj;
+        return nuovaRiga;
     });
 
     // --- DIAGNOSTICA AVANZATA ---
     console.log("--- INIZIO DIAGNOSTICA FILE ---");
     console.log("Intestazioni lette e pulite:", intestazioni);
-    if (jsonData.length > 0) {
-      console.log("Contenuto della prima riga di dati elaborata:", jsonData[0]);
+    console.log("Mappa degli indici delle colonne creata:", columnIndexMap);
+    if (datiFiltrati.length > 0) {
+      console.log("Contenuto della prima riga di dati elaborata:", datiFiltrati[0]);
     } else {
-      console.log("Nessuna riga di dati trovata dopo le intestazioni.");
+      console.log("Nessuna riga di dati valida trovata dopo le intestazioni.");
     }
     console.log("--- FINE DIAGNOSTICA FILE ---");
-    
-    if (jsonData.length === 0) {
-        return { statusCode: 400, body: JSON.stringify({ error: `Nessun dato trovato dopo le intestazioni.` }) };
+
+    if (datiFiltrati.length === 0) {
+        return { statusCode: 400, body: JSON.stringify({ error: `Nessun dato valido trovato nel file.` }) };
     }
-    
-    const datiFiltrati = jsonData.map(riga => {
-        const nuovaRiga = {};
-        COLONNE_DESIDERATE.forEach(nomeColonnaExcel => {
-            const nomeColonnaSupabase = nomeColonnaExcel.replace(/ /g, '_').toLowerCase();
-            nuovaRiga[nomeColonnaSupabase] = riga[nomeColonnaExcel] !== undefined ? riga[nomeColonnaExcel] : null;
-        });
-        return nuovaRiga;
-    });
 
     await supabase.from('dati_tabella').delete().neq('id', -1);
     await supabase.from('dati_tabella').insert(datiFiltrati);
