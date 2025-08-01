@@ -1,22 +1,22 @@
 // Versione Definitiva: Lettura manuale per posizione esatta delle colonne
 
 const xlsx = require('xlsx');
-const { createClient } = require('@supabase/supabase-js');
-
-const SUPABASE_URL = process.env.SUPABASE_URL;
-const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_KEY;
-
-const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY);
-
-// --- CONFIGURAZIONE SPECIFICA PER IL TUO FILE ---
-const NOME_FOGLIO = "Foglio1 (4)";
-// ----------------------------------------------------
 
 exports.handler = async (event, context) => {
   // Questo log deve apparire per forza
   console.log("--- Funzione invocata (v. Lettura per Posizione) ---");
 
   try {
+    const { createClient } = require('@supabase/supabase-js');
+    const SUPABASE_URL = process.env.SUPABASE_URL;
+    const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_KEY;
+
+    if (!SUPABASE_URL || !SUPABASE_SERVICE_KEY) {
+      throw new Error("Variabili d'ambiente Supabase non trovate.");
+    }
+    const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY);
+    console.log("Client Supabase inizializzato.");
+
     if (event.httpMethod !== 'POST') {
       return { statusCode: 405, body: JSON.stringify({ error: 'Metodo non consentito' }) };
     }
@@ -29,6 +29,7 @@ exports.handler = async (event, context) => {
     const fileBuffer = Buffer.from(base64File, 'base64');
     const workbook = xlsx.read(fileBuffer, { type: 'buffer' });
     
+    const NOME_FOGLIO = "Foglio1 (4)";
     const worksheet = workbook.Sheets[NOME_FOGLIO];
     if (!worksheet) {
       throw new Error(`Foglio di lavoro "${NOME_FOGLIO}" non trovato.`);
@@ -78,8 +79,15 @@ exports.handler = async (event, context) => {
         return { statusCode: 400, body: JSON.stringify({ error: `Nessun dato valido trovato nel file.` }) };
     }
 
-    await supabase.from('dati_tabella').delete().neq('id', -1);
-    await supabase.from('dati_tabella').insert(datiFiltrati);
+    console.log("Tentativo di cancellare i vecchi dati...");
+    const { error: deleteError } = await supabase.from('dati_tabella').delete().neq('id', -1);
+    if (deleteError) throw deleteError;
+    console.log("Cancellazione completata.");
+
+    console.log("Tentativo di inserire i nuovi dati...");
+    const { error: insertError } = await supabase.from('dati_tabella').insert(datiFiltrati);
+    if (insertError) throw insertError;
+    console.log("Inserimento completato.");
 
     return {
       statusCode: 200,
