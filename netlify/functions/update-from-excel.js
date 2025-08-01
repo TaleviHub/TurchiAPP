@@ -1,4 +1,4 @@
-// Versione FINALE: Gestisce correttamente maiuscole/minuscole
+// Versione FINALE: con diagnostica avanzata per loggare il contenuto del file
 
 const xlsx = require('xlsx');
 const { createClient } = require('@supabase/supabase-js');
@@ -10,17 +10,9 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY);
 
 // --- CONFIGURAZIONE SPECIFICA PER IL TUO FILE ---
 const NOME_FOGLIO = "Foglio1 (4)";
-
-// 2. Inserisci qui i nomi esatti delle colonne, rispettando le maiuscole/minuscole del file Excel
 const COLONNE_DESIDERATE = [
-  'PROG',
-  'MOTRICE',
-  'RIMORCHIO',
-  'CLIENTE',
-  'TRASPORTATORE',
-  'ACI',
-  'Sigillo', // Come da tua indicazione, questa non è in maiuscolo
-  'NOTE'
+  'PROG', 'MOTRICE', 'RIMORCHIO', 'CLIENTE', 
+  'TRASPORTATORE', 'ACI', 'Sigillo', 'NOTE'
 ];
 // ----------------------------------------------------
 
@@ -38,12 +30,15 @@ exports.handler = async (event, context) => {
     const fileBuffer = Buffer.from(base64File, 'base64');
     const workbook = xlsx.read(fileBuffer, { type: 'buffer' });
 
+    // --- DIAGNOSTICA AVANZATA ---
+    console.log("--- INIZIO DIAGNOSTICA FILE ---");
     console.log("Fogli trovati nel file:", workbook.SheetNames);
-
+    
     const worksheet = workbook.Sheets[NOME_FOGLIO];
     if (!worksheet) {
       throw new Error(`Foglio di lavoro "${NOME_FOGLIO}" non trovato. Fogli disponibili: [${workbook.SheetNames.join(", ")}]`);
     }
+    console.log(`Foglio "${NOME_FOGLIO}" trovato correttamente.`);
 
     const jsonData = xlsx.utils.sheet_to_json(worksheet);
 
@@ -51,26 +46,22 @@ exports.handler = async (event, context) => {
         return { statusCode: 400, body: JSON.stringify({ error: `Il foglio "${NOME_FOGLIO}" sembra essere vuoto.` }) };
     }
     
-    // Filtra i dati e converte i nomi delle colonne in minuscolo per Supabase
+    console.log("Intestazioni trovate nella prima riga:", Object.keys(jsonData[0]));
+    console.log("Contenuto della prima riga di dati:", jsonData[0]);
+    console.log("--- FINE DIAGNOSTICA FILE ---");
+    // -----------------------------
+    
     const datiFiltrati = jsonData.map(riga => {
         const nuovaRiga = {};
         COLONNE_DESIDERATE.forEach(nomeColonnaExcel => {
-            // Il nome della colonna per Supabase è sempre minuscolo
             const nomeColonnaSupabase = nomeColonnaExcel.replace(/ /g, '_').toLowerCase();
-            
-            // Leggiamo dalla riga usando il nome originale (con le maiuscole giuste)
             nuovaRiga[nomeColonnaSupabase] = riga[nomeColonnaExcel] !== undefined ? riga[nomeColonnaExcel] : null;
         });
         return nuovaRiga;
     });
 
-    // Svuota la tabella prima di inserire i nuovi dati
-    const { error: deleteError } = await supabase.from('dati_tabella').delete().neq('id', -1);
-    if (deleteError) throw deleteError;
-
-    // Inserisce i nuovi dati filtrati
-    const { error: insertError } = await supabase.from('dati_tabella').insert(datiFiltrati);
-    if (insertError) throw insertError;
+    await supabase.from('dati_tabella').delete().neq('id', -1);
+    await supabase.from('dati_tabella').insert(datiFiltrati);
 
     return {
       statusCode: 200,
