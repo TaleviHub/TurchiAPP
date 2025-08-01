@@ -1,4 +1,4 @@
-// Versione robusta con metodo di download diretto e logging avanzato
+// Versione v3: Aggiunto User-Agent e logging di errore dettagliato
 
 const xlsx = require('xlsx');
 const { createClient } = require('@supabase/supabase-js');
@@ -8,17 +8,15 @@ const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_KEY;
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY);
 
-// MODIFICA QUI: Metti i nomi delle colonne che vuoi importare
 const colonneDesiderate = ['Nome', 'Quantità', 'Prezzo_Unitario', 'Stato']; // Esempio
 
 exports.handler = async (event, context) => {
-  console.log("--- Funzione 'update-from-excel' invocata (v2 - Download Diretto) ---");
+  console.log("--- Funzione 'update-from-excel' invocata (v3 - User Agent) ---");
 
   if (event.httpMethod !== 'POST') {
     return { statusCode: 405, body: JSON.stringify({ error: 'Metodo non consentito' }) };
   }
 
-  // Import dinamico di node-fetch per massima compatibilità
   const fetch = (await import('node-fetch')).default;
   console.log("Libreria node-fetch importata.");
 
@@ -29,17 +27,25 @@ exports.handler = async (event, context) => {
     }
     console.log("Link ricevuto:", oneDriveLink);
 
-    // --- NUOVA LOGICA DI DOWNLOAD ---
-    // Tentiamo di creare un link di download diretto aggiungendo &download=1
-    // Questo è spesso più affidabile dell'API Graph per link pubblici.
     const directDownloadLink = `${oneDriveLink}&download=1`;
     console.log("Tento il download diretto da:", directDownloadLink);
     
-    const fileResponse = await fetch(directDownloadLink);
+    // Aggiungiamo un User-Agent per simulare un browser
+    const fetchOptions = {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+      }
+    };
+
+    const fileResponse = await fetch(directDownloadLink, fetchOptions);
     console.log("Risposta dal server di download. Status:", fileResponse.status);
 
     if (!fileResponse.ok) {
-      throw new Error(`Impossibile scaricare il file da OneDrive. Status: ${fileResponse.statusText}. Assicurati che il link sia pubblico e corretto.`);
+      // --- NUOVO LOGGING DI ERRORE ---
+      // Se la richiesta fallisce, proviamo a leggere il corpo della risposta
+      const errorBody = await fileResponse.text();
+      console.error("Corpo della risposta di errore da OneDrive:", errorBody);
+      throw new Error(`Impossibile scaricare il file. Status: ${fileResponse.status}. Controlla i log della funzione Netlify per i dettagli.`);
     }
     const fileBuffer = await fileResponse.buffer();
     console.log("File scaricato. Dimensione:", fileBuffer.byteLength);
