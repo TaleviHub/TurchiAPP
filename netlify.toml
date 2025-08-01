@@ -1,7 +1,15 @@
+# Questo file dice a Netlify come compilare il sito e dove trovare le funzioni.
+
 [build]
   command = "npm run build"
   publish = "build"
 
+# --- RIGA AGGIUNTA CHE RISOLVE IL PROBLEMA ---
+# Dice a Netlify che le nostre funzioni si trovano in questa cartella.
+[functions]
+  directory = "netlify/functions/"
+
+# Questa parte serve per far funzionare le app a pagina singola come React.
 [[redirects]]
   from = "/*"
   to = "/index.html"
