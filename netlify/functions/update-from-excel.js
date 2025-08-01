@@ -1,28 +1,44 @@
-// Versione Definitiva: Lettura manuale per massima affidabilità
+// Versione Definitiva: con diagnostica avanzata e inizializzazione sicura
 
 const xlsx = require('xlsx');
-const { createClient } = require('@supabase/supabase-js');
 
-const SUPABASE_URL = process.env.SUPABASE_URL;
-const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_KEY;
-
-const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY);
-
-// --- CONFIGURAZIONE SPECIFICA PER IL TUO FILE ---
-const NOME_FOGLIO = "Foglio1 (4)";
-// Mettiamo qui i nomi ESATTI delle colonne che vogliamo, così come sono scritte nel file Excel
-const COLONNE_DESIDERATE = [
-  'PROG', 'MOTRICE', 'RIMORCHIO', 'CLIENTE', 
-  'TRASPORTATORE', 'ACI', 'Sigillo', 'NOTE'
-];
-// ----------------------------------------------------
+// NOTA: Non inizializziamo più Supabase qui fuori
 
 exports.handler = async (event, context) => {
-  if (event.httpMethod !== 'POST') {
-    return { statusCode: 405, body: JSON.stringify({ error: 'Metodo non consentito' }) };
-  }
+  // Questo log deve apparire per forza
+  console.log("--- Funzione invocata (versione con init sicuro) ---");
 
   try {
+    const { createClient } = require('@supabase/supabase-js');
+
+    // Leggiamo le variabili d'ambiente
+    const SUPABASE_URL = process.env.SUPABASE_URL;
+    const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_KEY;
+
+    // --- DIAGNOSTICA DELLE CHIAVI ---
+    if (!SUPABASE_URL || !SUPABASE_SERVICE_KEY) {
+      console.error("ERRORE: Variabili d'ambiente SUPABASE_URL o SUPABASE_SERVICE_KEY non trovate!");
+      throw new Error("Configurazione del server incompleta. Contatta l'amministratore.");
+    }
+    console.log("Variabili d'ambiente lette correttamente.");
+    // ------------------------------------
+
+    // Inizializziamo il client qui, dentro il blocco try/catch
+    const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY);
+    console.log("Client Supabase inizializzato con successo.");
+
+    // --- CONFIGURAZIONE SPECIFICA PER IL TUO FILE ---
+    const NOME_FOGLIO = "Foglio1 (4)";
+    const COLONNE_DESIDERATE = [
+      'PROG', 'MOTRICE', 'RIMORCHIO', 'CLIENTE', 
+      'TRASPORTATORE', 'ACI', 'Sigillo', 'NOTE'
+    ];
+    // ----------------------------------------------------
+
+    if (event.httpMethod !== 'POST') {
+      return { statusCode: 405, body: JSON.stringify({ error: 'Metodo non consentito' }) };
+    }
+
     const { file: base64File } = JSON.parse(event.body);
     if (!base64File) {
       return { statusCode: 400, body: JSON.stringify({ error: 'Nessun file ricevuto.' }) };
@@ -36,36 +52,33 @@ exports.handler = async (event, context) => {
       throw new Error(`Foglio di lavoro "${NOME_FOGLIO}" non trovato.`);
     }
 
-    // --- NUOVA LOGICA DI LETTURA MANUALE ---
-    // Convertiamo tutto il foglio in un array di array (una griglia)
     const righeRaw = xlsx.utils.sheet_to_json(worksheet, { header: 1 });
-
-    // Troviamo l'indice della riga che contiene le nostre intestazioni (es. 'PROG')
-    const indiceIntestazioni = righeRaw.findIndex(riga => riga.includes('PROG'));
+    const indiceIntestazioni = righeRaw.findIndex(riga => riga && riga.includes('PROG'));
     if (indiceIntestazioni === -1) {
-      throw new Error("Riga delle intestazioni non trovata. Assicurati che la colonna 'PROG' esista.");
+      throw new Error("Riga delle intestazioni con 'PROG' non trovata.");
     }
-
-    // Estraiamo le intestazioni e le puliamo da spazi bianchi
     const intestazioni = righeRaw[indiceIntestazioni].map(h => typeof h === 'string' ? h.trim() : h);
-    
-    // I dati iniziano due righe dopo le intestazioni (saltando la riga vuota)
     const datiRaw = righeRaw.slice(indiceIntestazioni + 2);
-
-    // Convertiamo le righe di dati in oggetti JSON
     const jsonData = datiRaw
-      .filter(rigaArray => rigaArray.length > 0 && rigaArray[0] !== undefined) // Filtra righe completamente vuote
+      .filter(rigaArray => rigaArray && rigaArray.length > 0 && rigaArray[0] !== undefined && rigaArray[0] !== null)
       .map(rigaArray => {
         const obj = {};
         intestazioni.forEach((intestazione, i) => {
-          if (intestazione) { // Ignora colonne senza intestazione
-            obj[intestazione] = rigaArray[i];
-          }
+          if (intestazione) { obj[intestazione] = rigaArray[i]; }
         });
         return obj;
     });
-    // --- FINE NUOVA LOGICA ---
 
+    // --- DIAGNOSTICA AVANZATA ---
+    console.log("--- INIZIO DIAGNOSTICA FILE ---");
+    console.log("Intestazioni lette e pulite:", intestazioni);
+    if (jsonData.length > 0) {
+      console.log("Contenuto della prima riga di dati elaborata:", jsonData[0]);
+    } else {
+      console.log("Nessuna riga di dati trovata dopo le intestazioni.");
+    }
+    console.log("--- FINE DIAGNOSTICA FILE ---");
+    
     if (jsonData.length === 0) {
         return { statusCode: 400, body: JSON.stringify({ error: `Nessun dato trovato dopo le intestazioni.` }) };
     }
@@ -74,7 +87,6 @@ exports.handler = async (event, context) => {
         const nuovaRiga = {};
         COLONNE_DESIDERATE.forEach(nomeColonnaExcel => {
             const nomeColonnaSupabase = nomeColonnaExcel.replace(/ /g, '_').toLowerCase();
-            // Usiamo il nome originale (con maiuscole) per leggere dalla riga
             nuovaRiga[nomeColonnaSupabase] = riga[nomeColonnaExcel] !== undefined ? riga[nomeColonnaExcel] : null;
         });
         return nuovaRiga;
@@ -89,7 +101,7 @@ exports.handler = async (event, context) => {
     };
 
   } catch (error) {
-    console.error('ERRORE NELLA FUNZIONE:', error);
+    console.error('ERRORE CRITICO NELLA FUNZIONE:', error);
     return {
       statusCode: 500,
       body: JSON.stringify({ error: error.message }),
