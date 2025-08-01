@@ -165,7 +165,6 @@ export default function App() {
           </div>
         </div>
 
-        {/* --- CODICE CORRETTO PER LA UI DI AGGIORNAMENTO --- */}
         {isUpdateUIVisible && (
           <div className="bg-gray-800/50 rounded-lg p-6 mb-8 border border-gray-700 shadow-lg animate-fade-in">
             <div className="flex justify-between items-center mb-4">
@@ -182,15 +181,18 @@ export default function App() {
           </div>
         )}
         
-        <div className="overflow-x-auto bg-gray-800/50 rounded-lg border border-gray-700 shadow-lg">
+        {/* Contenitore della tabella con Scroll Snap */}
+        <div className="overflow-x-auto bg-gray-800/50 rounded-lg border border-gray-700 shadow-lg snap-x snap-mandatory">
           {loading ? (<p className="p-8 text-center text-gray-400">Inizializzazione database...</p>) : (
             <table className="min-w-full text-base text-left text-gray-300">
-              <thead className="bg-gray-700/50 text-sm text-gray-200 uppercase tracking-wider">
+              <thead className="text-sm text-gray-200 uppercase tracking-wider">
                 <tr>
                   {COLONNE_DA_VISUALIZZARE.map((col, index) => {
                     const isVisible = visibleColumns[col.key];
+                    // Le colonne fisse hanno uno sfondo solido per evitare trasparenze
+                    const bgHeaderClass = index < 3 ? 'bg-gray-700' : 'bg-gray-700/50';
                     return (
-                      <th key={col.key} scope="col" className={`px-6 py-4 font-semibold ${getStickyClass(index)} ${index < 3 ? 'bg-gray-700/80 backdrop-blur-sm' : 'bg-gray-700/50'} ${!isVisible ? 'hidden' : ''} sm:table-cell`} style={{minWidth: col.minWidth}}>
+                      <th key={col.key} scope="col" className={`px-6 py-4 font-semibold snap-start ${getStickyClass(index)} ${bgHeaderClass} ${!isVisible ? 'hidden' : ''} sm:table-cell`} style={{minWidth: col.minWidth}}>
                         {col.label}
                       </th>
                     );
@@ -199,11 +201,16 @@ export default function App() {
               </thead>
               <tbody>
                 {data.map((row, rowIndex) => (
-                  <tr key={row.id} className={`transition ${rowIndex % 2 === 0 ? 'bg-gray-800/50' : 'bg-gray-800/20'} hover:bg-gray-700/50`}>
+                  <tr key={row.id} className={`transition hover:bg-gray-700/50`}>
                     {COLONNE_DA_VISUALIZZARE.map((col, colIndex) => {
                       const isVisible = visibleColumns[col.key];
+                      // Le colonne fisse hanno uno sfondo solido che rispetta le righe alternate
+                      const bgCellClass = colIndex < 3 
+                        ? (rowIndex % 2 === 0 ? 'bg-gray-800' : 'bg-gray-900') 
+                        : (rowIndex % 2 === 0 ? 'bg-gray-800/50' : 'bg-gray-800/20');
+                      
                       return (
-                        <td key={`${row.id}-${col.key}`} className={`px-6 py-4 border-b border-gray-700 whitespace-nowrap ${getStickyClass(colIndex)} ${colIndex < 3 ? (rowIndex % 2 === 0 ? 'bg-gray-800' : 'bg-gray-800/80') : ''} ${!isVisible ? 'hidden' : ''} sm:table-cell`} contentEditable suppressContentEditableWarning={true} onBlur={(e) => {if (e.currentTarget.textContent !== String(row[col.key] || '')) {handleCellUpdate(row.id, col.key, e.currentTarget.textContent);}}}>
+                        <td key={`${row.id}-${col.key}`} className={`px-6 py-4 border-b border-gray-700 whitespace-nowrap snap-start ${getStickyClass(colIndex)} ${bgCellClass} ${!isVisible ? 'hidden' : ''} sm:table-cell`} contentEditable suppressContentEditableWarning={true} onBlur={(e) => {if (e.currentTarget.textContent !== String(row[col.key] || '')) {handleCellUpdate(row.id, col.key, e.currentTarget.textContent);}}}>
                           {String(row[col.key] || '')}
                         </td>
                       );
