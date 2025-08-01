@@ -1,4 +1,4 @@
-// Versione robusta con import dinamico e logging avanzato
+// Versione robusta con metodo di download diretto e logging avanzato
 
 const xlsx = require('xlsx');
 const { createClient } = require('@supabase/supabase-js');
@@ -8,10 +8,11 @@ const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_KEY;
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY);
 
-const colonneDesiderate = ['prog', 'Motrice', 'Rimorchio', 'Cliente','Trasportatore','ACI','Sigillo','Note']; // Esempio
+// MODIFICA QUI: Metti i nomi delle colonne che vuoi importare
+const colonneDesiderate = ['Nome', 'Quantità', 'Prezzo_Unitario', 'Stato']; // Esempio
 
 exports.handler = async (event, context) => {
-  console.log("--- Funzione 'update-from-excel' invocata ---");
+  console.log("--- Funzione 'update-from-excel' invocata (v2 - Download Diretto) ---");
 
   if (event.httpMethod !== 'POST') {
     return { statusCode: 405, body: JSON.stringify({ error: 'Metodo non consentito' }) };
@@ -28,13 +29,17 @@ exports.handler = async (event, context) => {
     }
     console.log("Link ricevuto:", oneDriveLink);
 
-    const base64Url = Buffer.from(oneDriveLink, 'utf-8').toString('base64').replace(/=/g, '').replace(/\+/g, '-').replace(/\//g, '_');
-    const apiUrl = `https://graph.microsoft.com/v1.0/shares/u!${base64Url}/driveItem/content`;
+    // --- NUOVA LOGICA DI DOWNLOAD ---
+    // Tentiamo di creare un link di download diretto aggiungendo &download=1
+    // Questo è spesso più affidabile dell'API Graph per link pubblici.
+    const directDownloadLink = `${oneDriveLink}&download=1`;
+    console.log("Tento il download diretto da:", directDownloadLink);
     
-    const fileResponse = await fetch(apiUrl);
-    console.log("Risposta da API Graph. Status:", fileResponse.status);
+    const fileResponse = await fetch(directDownloadLink);
+    console.log("Risposta dal server di download. Status:", fileResponse.status);
+
     if (!fileResponse.ok) {
-      throw new Error(`Impossibile scaricare il file da OneDrive. Status: ${fileResponse.statusText}`);
+      throw new Error(`Impossibile scaricare il file da OneDrive. Status: ${fileResponse.statusText}. Assicurati che il link sia pubblico e corretto.`);
     }
     const fileBuffer = await fileResponse.buffer();
     console.log("File scaricato. Dimensione:", fileBuffer.byteLength);
