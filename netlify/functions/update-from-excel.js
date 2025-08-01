@@ -1,4 +1,4 @@
-// Versione FINALE: con diagnostica avanzata per loggare il contenuto del file
+// Versione Definitiva: Lettura manuale per massima affidabilità
 
 const xlsx = require('xlsx');
 const { createClient } = require('@supabase/supabase-js');
@@ -10,6 +10,7 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY);
 
 // --- CONFIGURAZIONE SPECIFICA PER IL TUO FILE ---
 const NOME_FOGLIO = "Foglio1 (4)";
+// Mettiamo qui i nomi ESATTI delle colonne che vogliamo, così come sono scritte nel file Excel
 const COLONNE_DESIDERATE = [
   'PROG', 'MOTRICE', 'RIMORCHIO', 'CLIENTE', 
   'TRASPORTATORE', 'ACI', 'Sigillo', 'NOTE'
@@ -32,23 +33,40 @@ exports.handler = async (event, context) => {
     
     const worksheet = workbook.Sheets[NOME_FOGLIO];
     if (!worksheet) {
-      throw new Error(`Foglio di lavoro "${NOME_FOGLIO}" non trovato. Fogli disponibili: [${workbook.SheetNames.join(", ")}]`);
+      throw new Error(`Foglio di lavoro "${NOME_FOGLIO}" non trovato.`);
     }
 
-    // Aggiungiamo l'opzione { range: 1 } per saltare la prima riga
-    const jsonData = xlsx.utils.sheet_to_json(worksheet, { range: 1 });
+    // --- NUOVA LOGICA DI LETTURA MANUALE ---
+    // Convertiamo tutto il foglio in un array di array (una griglia)
+    const righeRaw = xlsx.utils.sheet_to_json(worksheet, { header: 1 });
+
+    // Troviamo l'indice della riga che contiene le nostre intestazioni (es. 'PROG')
+    const indiceIntestazioni = righeRaw.findIndex(riga => riga.includes('PROG'));
+    if (indiceIntestazioni === -1) {
+      throw new Error("Riga delle intestazioni non trovata. Assicurati che la colonna 'PROG' esista.");
+    }
+
+    // Estraiamo le intestazioni e le puliamo da spazi bianchi
+    const intestazioni = righeRaw[indiceIntestazioni].map(h => typeof h === 'string' ? h.trim() : h);
+    
+    // I dati iniziano due righe dopo le intestazioni (saltando la riga vuota)
+    const datiRaw = righeRaw.slice(indiceIntestazioni + 2);
+
+    // Convertiamo le righe di dati in oggetti JSON
+    const jsonData = datiRaw.map(rigaArray => {
+      const obj = {};
+      intestazioni.forEach((intestazione, i) => {
+        if (intestazione) { // Ignora colonne senza intestazione
+          obj[intestazione] = rigaArray[i];
+        }
+      });
+      return obj;
+    });
+    // --- FINE NUOVA LOGICA ---
 
     if (jsonData.length === 0) {
-        return { statusCode: 400, body: JSON.stringify({ error: `Il foglio "${NOME_FOGLIO}" sembra essere vuoto o non contiene dati validi.` }) };
+        return { statusCode: 400, body: JSON.stringify({ error: `Nessun dato trovato dopo le intestazioni.` }) };
     }
-    
-    // --- DIAGNOSTICA AVANZATA ---
-    // Questo ci mostrerà i nomi esatti delle colonne che la libreria sta leggendo
-    console.log("--- INIZIO DIAGNOSTICA FILE ---");
-    console.log("Intestazioni trovate (dopo aver saltato la prima riga):", Object.keys(jsonData[0]));
-    console.log("Contenuto della prima riga di dati letta:", jsonData[0]);
-    console.log("--- FINE DIAGNOSTICA FILE ---");
-    // -----------------------------
     
     const datiFiltrati = jsonData.map(riga => {
         const nuovaRiga = {};
