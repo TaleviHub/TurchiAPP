@@ -6,6 +6,7 @@ const SUPABASE_URL = 'https://vxbmwulmzmqmymqoxzjj.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZ4Ym13dWxtem1xbXltcW94empqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTM5NzQ3MzksImV4cCI6MjA2OTU1MDczOX0.9fU10_IpN0cNcjHmX9OQ1HLtdU1da-8nJ-LgvRWk7N4';
 const NOME_TABELLA = 'TaleviTurchi';
 
+
 const ALL_COLUMNS = [
   { key: 'prog', label: 'Prog', editable: false },
   { key: 'motrice', label: 'Motrice', editable: false },
@@ -18,89 +19,109 @@ const ALL_COLUMNS = [
 ];
 
 // --- COMPONENTE MODAL (FINESTRA DI DETTAGLIO) ---
-// Note ora sono modificabili con un pulsante di salvataggio esplicito.
+// Ora è un form completo per modificare tutti i campi editabili.
 const DetailModal = ({ rowData, onClose, onUpdate }) => {
   if (!rowData) return null;
 
-  // Stato per la nota corrente e quella originale per gestire il salvataggio
-  const [note, setNote] = useState(rowData.note || '');
-  const [originalNote, setOriginalNote] = useState(rowData.note || ''); // Salva lo stato iniziale
+  // Stato per i dati del form, inizializzato con i dati della riga
+  const [formData, setFormData] = useState(rowData);
   const [isSaving, setIsSaving] = useState(false);
-  const [isCompleted, setIsCompleted] = useState(!!rowData.completato);
 
-  // Funzione per salvare le note
-  const handleNoteSave = async () => {
-    // Salva solo se la nota è cambiata
-    if (note !== originalNote) {
-      setIsSaving(true);
-      await onUpdate(rowData.id, 'note', note);
-      setOriginalNote(note); // Aggiorna la nota originale dopo il salvataggio
-      setIsSaving(false);
-    }
+  // Mantiene i dati del form sincronizzati se la riga selezionata cambia
+  useEffect(() => {
+    setFormData(rowData);
+  }, [rowData]);
+
+  // Gestisce le modifiche a qualsiasi campo di input
+  const handleInputChange = (key, value) => {
+    setFormData(prev => ({ ...prev, [key]: value }));
   };
 
-  // Funzione per segnare come completato
+  // Gestisce il toggle per "completato", aggiornando solo lo stato locale
   const handleToggleComplete = () => {
-    const newStatus = !isCompleted;
-    setIsCompleted(newStatus);
-    onUpdate(rowData.id, 'completato', newStatus);
+    setFormData(prev => ({ ...prev, completato: !prev.completato }));
   };
 
-  // Controlla se la nota è stata modificata per mostrare/nascondere il pulsante Salva
-  const isNoteChanged = note !== originalNote;
+  // Salva tutte le modifiche in un'unica operazione
+  const handleSave = async () => {
+    setIsSaving(true);
+    const changes = {};
+    // Trova solo i campi che sono effettivamente cambiati
+    Object.keys(formData).forEach(key => {
+      if (formData[key] !== rowData[key]) {
+        changes[key] = formData[key];
+      }
+    });
+
+    if (Object.keys(changes).length > 0) {
+      await onUpdate(formData.id, changes);
+    }
+    setIsSaving(false);
+    onClose(); // Chiude la modale dopo il salvataggio
+  };
+
+  // Controlla se ci sono modifiche non salvate per abilitare il pulsante Salva
+  const hasChanges = JSON.stringify(formData) !== JSON.stringify(rowData);
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-4 animate-fade-in">
       <div className="bg-gray-800 rounded-lg shadow-xl w-full max-w-lg flex flex-col" style={{maxHeight: '90vh'}}>
         <div className="flex justify-between items-center p-4 border-b border-gray-700">
-          <h2 className="text-2xl font-bold text-white">Dettaglio: Prog {rowData.prog}</h2>
+          <h2 className="text-2xl font-bold text-white">Modifica Prog: {rowData.prog}</h2>
           <button onClick={onClose} className="text-gray-400 hover:text-white">
             <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
           </button>
         </div>
 
-        {/* Area scorrevole con i dettagli */}
+        {/* Area scorrevole con il form di modifica */}
         <div className="p-6 overflow-y-auto">
           <div className="space-y-4">
-            {ALL_COLUMNS.filter(c => c.key !== 'note').map(col => (
-              <div key={col.key} className="border-b border-gray-700 pb-2">
-                <p className="text-sm text-gray-400 uppercase tracking-wider">{col.label}</p>
-                {/* Applica lo stile barrato anche qui se completato */}
-                <p className={`text-lg text-white font-medium ${isCompleted ? 'line-through text-gray-500' : ''}`}>{String(rowData[col.key] || 'N/D')}</p>
+            {ALL_COLUMNS.map(col => (
+              <div key={col.key}>
+                <label className="text-sm text-gray-400 uppercase tracking-wider">{col.label}</label>
+                {col.editable ? (
+                  col.key === 'note' ? (
+                    <textarea
+                      value={formData[col.key] || ''}
+                      onChange={(e) => handleInputChange(col.key, e.target.value)}
+                      rows="4"
+                      className="w-full bg-gray-700 border border-gray-600 rounded-md p-2 mt-1 text-white placeholder-gray-500 focus:ring-2 focus:ring-indigo-500 focus:outline-none transition"
+                      placeholder={`Inserisci ${col.label}...`}
+                    />
+                  ) : (
+                    <input
+                      type="text"
+                      value={formData[col.key] || ''}
+                      onChange={(e) => handleInputChange(col.key, e.target.value)}
+                      className="w-full bg-gray-700 border border-gray-600 rounded-md p-2 mt-1 text-white placeholder-gray-500 focus:ring-2 focus:ring-indigo-500 focus:outline-none transition"
+                    />
+                  )
+                ) : (
+                  <p className="text-lg text-white font-medium bg-gray-900/50 p-2 rounded-md mt-1">{String(formData[col.key] || 'N/D')}</p>
+                )}
               </div>
             ))}
-            <div>
-              <p className="text-sm text-gray-400 uppercase tracking-wider">Note</p>
-              {/* Il campo note ora è sempre modificabile */}
-              <textarea
-                value={note}
-                onChange={(e) => setNote(e.target.value)}
-                rows="4"
-                className="w-full bg-gray-700 border border-gray-600 rounded-md p-2 mt-1 text-white placeholder-gray-500 focus:ring-2 focus:ring-indigo-500 focus:outline-none transition"
-                placeholder="Aggiungi una nota..."
-              ></textarea>
-              {/* Pulsante di salvataggio per le note, visibile solo se ci sono modifiche */}
-              {isNoteChanged && (
-                 <div className="text-right mt-2">
-                    <button
-                        onClick={handleNoteSave}
-                        disabled={isSaving}
-                        className="bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-2 px-4 rounded-md transition duration-300 disabled:bg-indigo-800 disabled:cursor-not-allowed"
-                    >
-                        {isSaving ? 'Salvataggio...' : 'Salva Note'}
-                    </button>
-                 </div>
-              )}
-            </div>
           </div>
         </div>
 
-        {/* Footer con toggle "Completato" */}
-        <div className="p-4 mt-auto border-t border-gray-700 bg-gray-800/50">
+        {/* Footer con azioni */}
+        <div className="p-4 mt-auto border-t border-gray-700 bg-gray-800/50 space-y-4">
            <label className="flex items-center justify-center gap-3 text-lg cursor-pointer">
-             <input type="checkbox" checked={isCompleted} onChange={handleToggleComplete} className="form-checkbox h-6 w-6 rounded bg-gray-700 border-gray-600 text-indigo-600 focus:ring-indigo-500" />
+             <input type="checkbox" checked={!!formData.completato} onChange={handleToggleComplete} className="form-checkbox h-6 w-6 rounded bg-gray-700 border-gray-600 text-indigo-600 focus:ring-indigo-500" />
              <span>Segna come completato</span>
            </label>
+           <div className="flex justify-end gap-3">
+              <button onClick={onClose} className="bg-gray-600 hover:bg-gray-500 text-white font-bold py-2 px-4 rounded-md transition duration-300">
+                Annulla
+              </button>
+              <button
+                  onClick={handleSave}
+                  disabled={!hasChanges || isSaving}
+                  className="bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-2 px-4 rounded-md transition duration-300 disabled:bg-gray-500 disabled:cursor-not-allowed"
+              >
+                  {isSaving ? 'Salvataggio...' : 'Salva Modifiche'}
+              </button>
+           </div>
         </div>
       </div>
     </div>
@@ -132,16 +153,15 @@ export default function App() {
     finally { setLoading(false); }
   }, []);
 
-  const handleUpdate = async (id, column, value) => {
+  // MODIFICATO: Ora accetta un oggetto di aggiornamenti
+  const handleUpdate = async (id, updates) => {
     if (!supabaseClient) return;
     try {
-      const { error } = await supabaseClient.from(NOME_TABELLA).update({ [column]: value }).eq('id', id);
+      const { error } = await supabaseClient.from(NOME_TABELLA).update(updates).eq('id', id);
       if (error) throw error;
-      // Se l'aggiornamento avviene dalla modale, aggiorna anche lo stato locale
-      if (selectedRow && selectedRow.id === id) {
-          setSelectedRow(prev => ({...prev, [column]: value}));
-      }
-    } catch (err) { console.error(`Errore aggiornando ${column}:`, err); }
+      // Aggiorna lo stato locale per un feedback immediato, anche se il realtime lo farà comunque
+      setData(currentData => currentData.map(row => row.id === id ? {...row, ...updates} : row));
+    } catch (err) { console.error(`Errore aggiornando la riga ${id}:`, err); }
   };
 
   const handleFileChange = (event) => { setSelectedFile(event.target.files[0]); };
@@ -198,9 +218,9 @@ export default function App() {
   const getStickyClass = (key) => {
     const stickyClasses = {
       checkbox: 'sticky left-0 z-20',
-      prog: 'sticky left-[8rem] z-20', // Adattato per la nuova larghezza della colonna azione
-      motrice: 'sticky left-[14rem] z-10', // Adattato
-      rimorchio: 'sticky left-[24rem] z-10', // Adattato
+      prog: 'sticky left-[8rem] z-20',
+      motrice: 'sticky left-[14rem] z-10',
+      rimorchio: 'sticky left-[24rem] z-10',
     };
     return stickyClasses[key] || '';
   };
@@ -266,7 +286,6 @@ export default function App() {
                    <table className="min-w-full text-base text-left text-gray-300">
                     <thead className="text-sm text-gray-200 uppercase tracking-wider">
                       <tr>
-                        {/* MODIFICA: Intestazione colonna azione */}
                         <th scope="col" className={`px-4 py-4 font-semibold snap-start ${getStickyClass('checkbox')} bg-gray-800`} style={{minWidth: '8rem'}}>Azione</th>
                         {ALL_COLUMNS.map((col) => {
                           const bgHeaderClass = ['prog', 'motrice', 'rimorchio'].includes(col.key) ? 'bg-gray-800' : 'bg-gray-700/50';
@@ -281,10 +300,10 @@ export default function App() {
                     <tbody>
                       {data.map((row, rowIndex) => (
                         <tr key={row.id} className={`transition ${row.completato ? 'bg-gray-800/50 text-gray-500' : ''} hover:bg-gray-700/40`}>
-                          {/* MODIFICA: Pulsante al posto della checkbox */}
                           <td className={`px-4 py-4 border-b border-gray-700 snap-start ${getStickyClass('checkbox')} ${row.completato ? 'bg-gray-800/80' : 'bg-gray-800'}`}>
                             <button
-                                onClick={() => handleUpdate(row.id, 'completato', !row.completato)}
+                                // MODIFICATO: Passa un oggetto a handleUpdate
+                                onClick={() => handleUpdate(row.id, { completato: !row.completato })}
                                 className={`w-full text-sm font-bold py-1 px-2 rounded-md transition duration-300 ${
                                   row.completato
                                     ? 'bg-yellow-600 hover:bg-yellow-500 text-white'
@@ -296,11 +315,11 @@ export default function App() {
                           </td>
                           {ALL_COLUMNS.map((col) => {
                             const bgCellClass = ['prog', 'motrice', 'rimorchio'].includes(col.key) ? (row.completato ? 'bg-gray-800/80' : 'bg-gray-800') : (rowIndex % 2 === 0 ? 'bg-gray-800/50' : 'bg-gray-800/20');
-                            const isClickable = (col.key === 'motrice' || col.key === 'rimorchio');
+                            const isClickable = !col.editable; // Rende cliccabili per aprire la modale le celle non editabili direttamente
                             return (
                               <td key={`${row.id}-${col.key}`}
-                                  className={`px-6 py-4 border-b border-gray-700 whitespace-nowrap snap-start ${getStickyClass(col.key)} ${bgCellClass} ${isClickable ? 'cursor-pointer hover:text-indigo-400' : ''} ${row.completato ? 'line-through' : ''}`}
-                                  onClick={() => (isClickable || col.key === 'note') && setSelectedRow(row)}>
+                                  className={`px-6 py-4 border-b border-gray-700 whitespace-nowrap snap-start ${getStickyClass(col.key)} ${bgCellClass} ${row.completato ? 'line-through' : ''} cursor-pointer hover:text-indigo-400`}
+                                  onClick={() => setSelectedRow(row)}>
                                 {String(row[col.key] || '')}
                               </td>
                             );
