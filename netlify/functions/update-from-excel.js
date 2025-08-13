@@ -1,17 +1,9 @@
-// Versione Definitiva: con arrotondamento per eccesso della colonna ACI
+// Versione Definitiva: Aggiunge il campo 'completato' ai nuovi dati
 
 const xlsx = require('xlsx');
 
-// Funzione helper per arrotondare per eccesso al multiplo di 5
-const roundUpToMultipleOf5 = (num) => {
-  if (typeof num !== 'number' || isNaN(num)) {
-    return null; // Restituisce null se il valore non è un numero
-  }
-  return Math.ceil(num / 5) * 5;
-};
-
 exports.handler = async (event, context) => {
-  console.log("--- Funzione invocata (v. con Arrotondamento ACI) ---");
+  console.log("--- Funzione invocata (v. con Campo Completato) ---");
 
   try {
     const { createClient } = require('@supabase/supabase-js');
@@ -59,10 +51,10 @@ exports.handler = async (event, context) => {
           rimorchio: rigaArray[2],
           cliente: rigaArray[3],
           trasportatore: rigaArray[4],
-          // Applichiamo l'arrotondamento qui
-          aci: roundUpToMultipleOf5(parseFloat(rigaArray[6])),
+          aci: Math.ceil(parseFloat(rigaArray[6]) / 5) * 5 || null,
           sigillo: rigaArray[9],
-          note: rigaArray[12] || null
+          note: rigaArray[12] || null,
+          completato: false // Aggiungiamo il nuovo campo, di default non è completato
       }));
 
     if (datiFiltrati.length === 0) {
