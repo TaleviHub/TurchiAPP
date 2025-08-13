@@ -200,7 +200,7 @@ export default function App() {
                   {data.map((row, rowIndex) => (
                     <tr key={row.id} className={`transition ${row.completato ? 'bg-gray-800/50 text-gray-500' : ''} hover:bg-gray-700/40`}>
                       <td className={`px-4 py-4 border-b border-gray-700 snap-start ${getStickyClass('checkbox')} ${row.completato ? 'bg-gray-800/80' : 'bg-gray-800'}`}>
-                        <input type="checkbox" checked={row.completato} onChange={() => handleUpdate(row.id, 'completato', !row.completato)} className="form-checkbox h-5 w-5 rounded bg-gray-700 border-gray-600 text-indigo-600 focus:ring-indigo-500" />
+                        <input type="checkbox" checked={!!row.completato} onChange={() => handleUpdate(row.id, 'completato', !row.completato)} className="form-checkbox h-5 w-5 rounded bg-gray-700 border-gray-600 text-indigo-600 focus:ring-indigo-500" />
                       </td>
                       {ALL_COLUMNS.map((col) => {
                         const bgCellClass = ['prog', 'motrice', 'rimorchio'].includes(col.key) ? (row.completato ? 'bg-gray-800/80' : 'bg-gray-800') : (rowIndex % 2 === 0 ? 'bg-gray-800/50' : 'bg-gray-800/20');
